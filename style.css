@@ -1,0 +1,1465 @@
+/* style.css */
+
+/* --- CSS Variables --- */
+:root {
+    /* Строгая цветовая палитра */
+    --primary-color: #ff6b35; /* Яркий оранжевый как акцент */
+    --primary-hover-color: #e55a2b; /* Темнее для ховера */
+    --background-color: #f8f9fa; /* Чистый светлый фон */
+    --container-bg-color: #ffffff;
+    --border-color: #e9ecef; /* Тонкие границы */
+    --input-border-focus-color: rgba(255, 107, 53, 0.3); /* Оранжевое свечение */
+    --text-color: #212529; /* Чистый черный для текста */
+    --heading-color: #1a1a1a; /* Почти черный для заголовков */
+    --success-color: #28a745; /* Зеленый для наличных */
+    --error-color: #dc3545;
+    --info-color: #007bff; /* Синий для терминала */
+    --info-hover-color: #0056b3; /* Темнее синий для ховера */
+    --info-bg-color: #e3f2fd; 
+    --info-border-color: #90caf9;
+    --warning-color: #ffc107;
+    --warning-text-color: #212529;
+    --danger-color: #dc3545; 
+    --success-dark-color: #1e7e34;
+
+    /* Строгие тени */
+    --shadow-light: 0 2px 8px rgba(0,0,0,0.1);
+    --shadow-medium: 0 4px 16px rgba(0,0,0,0.15);
+    --shadow-heavy: 0 8px 32px rgba(0,0,0,0.2);
+    
+    /* Минимальные скругления */
+    --border-radius-sm: 6px;
+    --border-radius-md: 12px;
+    --border-radius-lg: 16px;
+
+    /* Строгие отступы */
+    --spacing-xxs: 4px;
+    --spacing-xs: 8px;
+    --spacing-sm: 16px;
+    --spacing-md: 24px;
+    --spacing-lg: 32px;
+    --spacing-xl: 48px;
+
+    /* Карточки абонентов */
+    --card-bg-color: #ffffff;
+    --card-border-color: #e9ecef;
+    --header-bg-color: var(--primary-color);
+    --header-text-color: #ffffff;
+    --header-hover-bg-color: var(--primary-hover-color);
+    --details-bg-color: #fafbfc; 
+    --details-border-top-color: #e9ecef;
+    --detail-label-color: #6c757d; 
+    --detail-value-color: var(--text-color); 
+
+    /* Иконки */
+    --icon-color: #ffffff;
+    --toggle-icon-active: #ffffff;
+
+    /* Пагинация */
+    --pagination-bg-color: #f8f9fa;
+    --pagination-border-color: #e9ecef;
+    --pagination-button-hover-bg: #e9ecef;
+    --pagination-button-disabled-bg: #f8f9fa;
+    --pagination-button-disabled-color: #adb5bd;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start; 
+    min-height: 100vh;
+    background-color: var(--background-color);
+    flex-direction: column;
+    padding: var(--spacing-md); 
+    margin: 0;
+    color: var(--text-color);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    line-height: 1.5;
+    overflow-x: hidden;
+    font-weight: 400;
+}
+
+h1, h2 {
+    color: var(--heading-color);
+    text-align: center;
+    margin-bottom: var(--spacing-lg);
+    font-weight: 600; 
+    width: 100%; 
+    font-size: 1.75rem;
+    letter-spacing: -0.025em;
+}
+
+/* Скрываем заголовки в контейнерах, так как они теперь в верхней панели */
+.container h1,
+.container h2 {
+    display: none;
+}
+
+/* --- Screen Management Styles --- */
+.screen {
+    display: none; 
+    width: 100%;
+    justify-content: center;
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 0; 
+    position: relative;
+}
+
+.screen.active {
+    display: flex; 
+}
+
+/* --- Top Bar Styles --- */
+.top-bar {
+    position: fixed;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 100%;
+    max-width: 600px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-sm) var(--spacing-md);
+    background-color: var(--container-bg-color);
+    border-bottom: 1px solid var(--border-color);
+    z-index: 1000;
+    box-sizing: border-box;
+}
+
+.page-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--heading-color);
+    margin: 0;
+    text-align: center;
+    flex: 1;
+    letter-spacing: -0.025em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.user-name-display {
+    flex: 1;
+    text-align: center;
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--text-color);
+    margin: 0 var(--spacing-sm);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* Отладочные стили убраны */
+}
+
+.user-name-display span {
+    color: #000000 !important; /* Принудительно черный цвет */
+    font-weight: 600 !important;
+    font-size: 0.95rem !important;
+    text-shadow: 1px 1px 2px rgba(255,255,255,0.8); /* Белая тень для контраста */
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+/* Дополнительная специфичность для гарантии */
+.top-bar .user-name-display span {
+    color: #000000 !important;
+    font-weight: 600 !important;
+    font-size: 0.95rem !important;
+}
+
+.icon-button {
+    background: none;
+    border: none;
+    padding: var(--spacing-xs);
+    border-radius: var(--border-radius-sm);
+    cursor: pointer;
+    color: var(--text-color);
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+}
+
+.icon-button:hover {
+    background-color: var(--background-color);
+    color: var(--primary-color);
+}
+
+.logout-button {
+    color: var(--error-color);
+}
+
+.logout-button:hover {
+    background-color: rgba(220, 53, 69, 0.1);
+    color: var(--error-color);
+}
+
+.back-button {
+    color: var(--text-color);
+}
+
+.back-button:hover {
+    background-color: var(--background-color);
+    color: var(--primary-color);
+}
+
+.language-selector {
+    background: none;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-sm);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    font-size: 1.2rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.language-selector:hover {
+    border-color: var(--primary-color);
+    background-color: var(--background-color);
+}
+
+#loadingMessage {
+    align-items: center; 
+    justify-content: center;
+    height: 100vh;
+    font-size: 1.5rem; 
+    color: var(--primary-color);
+    font-weight: 600;
+}
+
+
+.container {
+    background-color: var(--container-bg-color);
+    padding: var(--spacing-lg);
+    border-radius: var(--border-radius-md); 
+    box-shadow: var(--shadow-light); 
+    margin-bottom: var(--spacing-lg);
+    width: 100%;
+    max-width: 480px;
+    box-sizing: border-box;
+    display: flex; 
+    flex-direction: column; 
+    align-items: center;
+    border: 1px solid var(--border-color);
+    margin-top: 80px; /* Отступ для фиксированной верхней панели */
+}
+
+/* Специфические стили для контейнеров */
+.login-container,
+#searchContainer,
+#resultsContainer {
+    /* Наследуют стили от .container */
+    position: relative;
+}
+
+.header-container {
+    background-color: transparent;
+    box-shadow: none;
+    border-radius: 0;
+    padding: 5px; 
+    margin-bottom: var(--spacing-md);
+    display: flex;
+    justify-content: flex-end; 
+    align-items: center;
+    gap: var(--spacing-sm); 
+    width: 100%; 
+    max-width: 550px; 
+    box-sizing: border-box;
+}
+
+#resultsHeader {
+    justify-content: flex-start; 
+}
+
+
+.form-group {
+    margin-bottom: var(--spacing-md);
+    width: 100%; 
+}
+
+label {
+    display: block;
+    margin-bottom: var(--spacing-xs);
+    font-weight: 600; 
+    color: var(--heading-color);
+    font-size: 1rem; 
+}
+
+input[type="text"],
+input[type="password"],
+input[type="number"],
+select {
+    width: 100%;
+    padding: var(--spacing-sm); 
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-sm); 
+    box-sizing: border-box;
+    font-size: 1rem;
+    transition: all 0.2s ease;
+    -webkit-appearance: none; 
+    -moz-appearance: none;
+    appearance: none;
+    background-color: white; 
+    color: var(--text-color);
+    font-weight: 400;
+    line-height: 1.5;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%236c757d'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 16px;
+}
+
+input[type="text"]:focus,
+input[type="password"]:focus,
+input[type="number"]:focus,
+select:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px var(--input-border-focus-color);
+    outline: none;
+}
+
+/* Стили для селекта когда ничего не выбрано */
+select[data-selected="false"] {
+    color: #6c757d;
+}
+
+select[data-selected="true"] {
+    color: var(--text-color);
+}
+
+.button { 
+    padding: var(--spacing-sm) var(--spacing-md);
+    border: none;
+    border-radius: var(--border-radius-sm); 
+    cursor: pointer;
+    font-size: 1rem;
+    transition: all 0.2s ease;
+    font-weight: 500;
+    letter-spacing: 0.025em;
+    box-shadow: var(--shadow-light);
+    white-space: nowrap;
+    border: 1px solid transparent;
+}
+
+.button-primary {
+    background-color: var(--primary-color);
+    color: white;
+    width: 100%; 
+    margin-top: var(--spacing-md); 
+}
+
+.button-primary:hover {
+    background-color: var(--primary-hover-color);
+    box-shadow: var(--shadow-medium);
+}
+
+.button-primary:active {
+    transform: translateY(1px);
+    box-shadow: var(--shadow-light);
+}
+
+.button-danger {
+    background-color: var(--error-color);
+    color: white;
+    width: auto;
+    font-size: 0.9em;
+    padding: var(--spacing-xs) var(--spacing-md);
+    box-shadow: none;
+    border-radius: var(--border-radius-sm);
+}
+
+.button-danger:hover {
+    background-color: #c82333; 
+    transform: translateY(-1px);
+    box-shadow: none;
+}
+
+.button-secondary { 
+    background-color: #6c757d; 
+    color: white;
+    width: auto;
+    font-size: 0.9em;
+    padding: var(--spacing-xs) var(--spacing-md);
+    box-shadow: none;
+    border-radius: var(--border-radius-sm);
+}
+
+.button-secondary:hover {
+    background-color: #5a6268;
+    transform: translateY(-1px);
+    box-shadow: none;
+}
+
+
+.button-small { 
+    padding: var(--spacing-xs) var(--spacing-sm);
+    font-size: 0.9em;
+    box-shadow: none;
+    background-color: var(--primary-color);
+    color: white;
+    border-radius: var(--border-radius-sm);
+}
+
+.button-small:hover:not(:disabled) {
+    background-color: var(--primary-hover-color);
+    transform: translateY(-1px);
+}
+
+.button-small:disabled {
+    background-color: var(--pagination-button-disabled-bg);
+    color: var(--pagination-button-disabled-color);
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+
+#message,
+#searchMessage,
+#resultsMessage {
+    margin-top: var(--spacing-md);
+    margin-bottom: var(--spacing-md);
+    text-align: center;
+    font-size: 0.95rem;
+    padding: var(--spacing-xs) var(--spacing-sm); 
+    border-radius: var(--border-radius-sm);
+    /* border: 1px solid; */
+    width: 100%; 
+    box-sizing: border-box;
+    
+}
+
+.error {
+    color: var(--error-color);
+    background-color: #fde8ec; 
+    border-color: #f5c6cb;
+    font-weight: 600;
+}
+
+.success {
+    color: var(--success-color);
+    background-color: #e6ffed; 
+    border-color: #c3e6cb;
+    font-weight: 600;
+}
+
+.info {
+    color: var(--info-color);
+    background-color: var(--info-bg-color);
+    border-color: var(--info-border-color);
+    font-weight: 600;
+}
+
+
+/* --- Стили для заголовков разделов формы --- */
+.section-title {
+    font-size: 1.15rem; 
+    font-weight: 700; 
+    color: var(--heading-color);
+    margin-top: var(--spacing-lg);
+    margin-bottom: var(--spacing-md);
+    padding-bottom: var(--spacing-xs); 
+    border-bottom: 1px dashed var(--border-color); 
+    width: 100%; 
+    text-align: left; 
+}
+
+/* --- Стили для плавного скрытия/отображения поля улиц --- */
+.street-form-group-hidden {
+    max-height: 0; 
+    opacity: 0;    
+    overflow: hidden; 
+    margin-top: 0;   
+    margin-bottom: 0; 
+    padding-top: 0; 
+    padding-bottom: 0; 
+    transition: max-height 0.4s ease-out, opacity 0.4s ease-out, margin 0.4s ease-out, padding 0.4s ease-out;
+}
+
+.street-form-group-visible {
+    max-height: 120px; 
+    opacity: 1;    
+    margin-top: var(--spacing-md); 
+    margin-bottom: var(--spacing-md); 
+    padding-top: initial; 
+    padding-bottom: initial; 
+    transition: max-height 0.4s ease-in, opacity 0.4s ease-in, margin 0.4s ease-in, padding 0.4s ease-in;
+}
+
+/* --- Стили для списка результатов поиска --- */
+#searchResultsList {
+    width: 100%;
+    display: flex; 
+    flex-direction: column; 
+    gap: var(--spacing-md); 
+    margin-top: var(--spacing-md); 
+}
+
+.subscriber-card {
+    background-color: var(--card-bg-color);
+    border: 1px solid var(--card-border-color);
+    border-radius: var(--border-radius-md); 
+    overflow: hidden; 
+    box-shadow: var(--shadow-light); 
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.subscriber-card:hover {
+    box-shadow: var(--shadow-medium);
+    border-color: var(--primary-color);
+}
+
+.subscriber-header {
+    background-color: var(--header-bg-color); 
+    color: var(--header-text-color);
+    padding: var(--spacing-md);
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 1.1rem; 
+    font-weight: 500; 
+    border-bottom: 1px solid rgba(255,255,255,0.1); 
+    transition: background-color 0.2s ease;
+    border-top-left-radius: var(--border-radius-md); 
+    border-top-right-radius: var(--border-radius-md);
+}
+
+.subscriber-card.active .subscriber-header {
+    border-bottom-left-radius: 0; 
+    border-bottom-right-radius: 0;
+}
+
+.subscriber-header:hover {
+    background-color: var(--primary-hover-color); /* Используем hover цвет из primary */
+}
+
+.toggle-icon {
+    font-size: 1.5em; 
+    transition: transform 0.3s ease;
+    min-width: 1.5em; 
+    text-align: right;
+    color: var(--icon-color);
+    line-height: 1; 
+}
+
+.subscriber-card.active .toggle-icon {
+    transform: rotate(90deg); 
+    color: var(--toggle-icon-active);
+}
+
+.subscriber-details {
+    display: none; 
+    padding: var(--spacing-md);
+    background-color: var(--details-bg-color);
+    border-top: 1px solid var(--details-border-top-color);
+    border-bottom-left-radius: var(--border-radius-md); 
+    border-bottom-right-radius: var(--border-radius-md);
+    animation: fadeInSlideDown 0.3s ease-out; 
+}
+
+/* Стили для строк с информацией */
+.detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-xs) 0;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    font-size: 1rem;
+}
+
+.detail-row:last-of-type {
+    border-bottom: none;
+    margin-bottom: var(--spacing-sm);
+}
+
+.detail-label {
+    font-weight: 600;
+    color: var(--heading-color);
+    flex-shrink: 0;
+    margin-right: var(--spacing-sm);
+}
+
+.detail-value {
+    color: var(--text-color);
+    text-align: right;
+    flex-grow: 1;
+    word-break: break-word;
+}
+
+.detail-value.negative-balance {
+    color: var(--error-color);
+    font-weight: 600;
+}
+
+.subscriber-card.active .subscriber-details {
+    display: block;
+}
+
+/* Анимация для раскрытия деталей */
+@keyframes fadeInSlideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.subscriber-details p {
+    margin: var(--spacing-xs) 0;
+    font-size: 0.95em;
+    color: var(--detail-label-color);
+    display: flex; 
+    justify-content: space-between;
+    padding: var(--spacing-xxs) 0; 
+    border-bottom: 1px dashed rgba(var(--border-color), 0.5); 
+}
+.subscriber-details p:last-of-type {
+    border-bottom: none; 
+}
+
+
+.subscriber-details strong {
+    color: var(--detail-value-color); 
+    font-weight: 600;
+    text-align: right; 
+    flex-grow: 1; 
+    padding-left: var(--spacing-sm); 
+}
+
+/* Стили для долгов и переплат */
+.subscriber-details p.balance-status {
+    font-size: 1em;
+    font-weight: 700;
+    padding: var(--spacing-xs) 0;
+    margin-top: var(--spacing-sm);
+    border-top: 1px solid var(--details-border-top-color); 
+}
+.subscriber-details p.balance-status strong {
+    font-size: 1.05em; 
+}
+
+.subscriber-details p.balance-status.debt strong {
+    color: var(--danger-color); 
+}
+
+.subscriber-details p.balance-status.overpayment strong {
+    color: var(--success-dark-color); 
+}
+
+
+.service-section {
+    margin-top: var(--spacing-md);
+    padding-top: var(--spacing-md);
+    border-top: 1px solid var(--details-border-top-color);
+    display: flex; 
+    flex-direction: column; 
+    gap: var(--spacing-sm); 
+}
+
+.service-section label {
+    font-weight: 600;
+    margin-bottom: 0; 
+}
+
+.service-section select,
+.service-section input[type="number"] {
+    width: 100%;
+    margin-bottom: 0; 
+}
+
+.service-section .button-group {
+    display: flex;
+    flex-wrap: wrap; 
+    gap: var(--spacing-sm); 
+    margin-top: var(--spacing-sm); 
+}
+
+.service-section button {
+    background-color: var(--primary-color);
+    color: white;
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-radius: var(--border-radius-sm);
+    font-size: 0.95rem; 
+    margin-top: 0; 
+    width: auto; 
+    flex-grow: 1; 
+    min-width: 120px; 
+    box-shadow: var(--shadow-light);
+    border: none;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.service-section button.previous-payments-button {
+    background-color: var(--warning-color);
+    color: var(--warning-text-color);
+}
+
+.service-section button:hover {
+    background-color: var(--primary-hover-color);
+    box-shadow: var(--shadow-medium); 
+}
+
+.service-section button:active {
+    transform: translateY(1px);
+    box-shadow: var(--shadow-light);
+}
+
+/* --- Pagination Styles --- */
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: var(--spacing-sm);
+    margin-top: var(--spacing-md); 
+    padding: var(--spacing-xs) var(--spacing-sm);
+    background-color: var(--pagination-bg-color);
+    border: 1px solid var(--pagination-border-color);
+    border-radius: var(--border-radius-sm); 
+    width: auto;
+    margin-left: auto;
+    margin-right: auto;
+    box-sizing: border-box;
+    box-shadow: var(--shadow-light);
+}
+
+.pagination.hidden {
+    display: none;
+}
+
+.pagination-button {
+    background: none;
+    border: none;
+    padding: var(--spacing-xs);
+    border-radius: var(--border-radius-sm);
+    cursor: pointer;
+    color: var(--text-color);
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+}
+
+.pagination-button:hover:not(:disabled) {
+    background-color: var(--pagination-button-hover-bg);
+    color: var(--primary-color);
+}
+
+.pagination-button:disabled {
+    color: var(--pagination-button-disabled-color);
+    cursor: not-allowed;
+}
+
+#pageInfo {
+    font-size: 0.9rem;
+    color: var(--text-color);
+    font-weight: 500;
+    min-width: 40px;
+    text-align: center;
+}
+
+
+/* --- Адаптивность для всех размеров телефона --- */
+@media (max-width: 768px) { 
+    body {
+        padding: var(--spacing-sm); 
+    }
+    
+    .top-bar {
+        max-width: 100%;
+        padding: var(--spacing-xs) var(--spacing-sm);
+    }
+    
+    .page-title {
+        font-size: 1rem;
+    }
+    
+    .user-name-display {
+        font-size: 0.85rem;
+        margin: 0 var(--spacing-xs);
+        min-width: 0; /* Позволяет элементу сжиматься */
+        flex-shrink: 1; /* Позволяет сжиматься при нехватке места */
+    }
+    
+    .user-name-display span {
+        font-size: 0.85rem !important;
+    }
+    
+    /* Исправляем конфликтующие стили для language-selector-container в верхней панели */
+    .top-bar .language-selector-container {
+        position: static !important;
+        margin-bottom: 0 !important;
+        width: auto !important;
+        background: transparent !important;
+        padding: 0 !important;
+        box-shadow: none !important;
+    }
+
+    .container {
+        padding: var(--spacing-md); 
+        max-width: 100%; 
+        margin-bottom: var(--spacing-md);
+        margin-top: 70px; /* Меньший отступ для мобильных */
+    }
+
+    h1, h2 {
+        font-size: 1.6rem;
+        margin-bottom: var(--spacing-md);
+    }
+    .section-title {
+        font-size: 1.1rem;
+        margin-top: var(--spacing-md);
+        margin-bottom: var(--spacing-sm);
+    }
+
+    input[type="text"],
+    input[type="password"],
+    input[type="number"],
+    select {
+        padding: var(--spacing-xs); 
+        font-size: 0.95rem;
+    }
+
+    .button {
+        font-size: 0.95rem;
+        padding: var(--spacing-xs) var(--spacing-sm);
+    }
+    .button-primary {
+        padding: var(--spacing-sm); 
+    }
+
+    .header-container {
+        padding: var(--spacing-xs) 0;
+        margin-bottom: var(--spacing-sm);
+        max-width: 100%; 
+    }
+    #resultsHeader {
+        flex-direction: column; 
+        gap: var(--spacing-xs);
+        align-items: stretch; 
+    }
+    #resultsHeader .button {
+        width: 100%;
+        margin: 0;
+    }
+
+
+    /* Увеличиваем отступы для читаемости в результатах поиска */
+    .subscriber-header {
+        padding: var(--spacing-sm);
+        font-size: 1.05em;
+    }
+    .toggle-icon {
+        font-size: 1.3em;
+    }
+
+    .subscriber-details {
+        padding: var(--spacing-sm);
+    }
+    .subscriber-details p {
+        font-size: 0.9em;
+        flex-direction: column; 
+        align-items: flex-start; 
+        border-bottom: none; 
+        margin-bottom: var(--spacing-xs); 
+    }
+    .subscriber-details p span { 
+        display: block; 
+    }
+    .subscriber-details p strong {
+        margin-top: var(--spacing-xxs); 
+        text-align: left; 
+        padding-left: 0; 
+    }
+    .subscriber-details p.balance-status {
+        padding: var(--spacing-xs) 0;
+    }
+
+    .service-section {
+        gap: var(--spacing-xs); 
+    }
+    .service-section select,
+    .service-section input[type="number"] {
+        padding: var(--spacing-xs);
+        font-size: 0.95em;
+    }
+
+    .service-section .button-group {
+        flex-direction: column; 
+        gap: var(--spacing-xs);
+    }
+    .service-section button {
+        width: 100%; 
+        min-width: unset; 
+        padding: var(--spacing-sm);
+        font-size: 0.9em;
+    }
+    
+    .button-group .pay-button {
+        min-width: 120px;
+        font-size: 0.9em;
+        padding: var(--spacing-xs) var(--spacing-sm);
+    }
+
+    .pagination {
+        flex-direction: row; 
+        gap: var(--spacing-xs);
+        margin-top: var(--spacing-sm);
+        padding: var(--spacing-xs);
+        justify-content: center;
+    }
+    .pagination-button {
+        width: 32px;
+        height: 32px;
+        padding: 4px;
+        font-size: 0.8rem;
+    }
+    #pageInfo {
+        min-width: 30px;
+        font-size: 0.8rem;
+    }
+}
+
+@media (max-width: 480px) { 
+    h1, h2 {
+        font-size: 1.4rem;
+    }
+    .container {
+        padding: var(--spacing-sm);
+    }
+    .subscriber-header {
+        font-size: 1em;
+        padding: var(--spacing-xs);
+    }
+    
+    /* Дополнительные стили для очень маленьких экранов */
+    .top-bar {
+        padding: var(--spacing-xs);
+    }
+    
+    .user-name-display {
+        font-size: 0.8rem;
+        margin: 0 2px;
+    }
+    
+    .user-name-display span {
+        font-size: 0.8rem !important;
+    }
+    
+    .icon-button {
+        width: 36px;
+        height: 36px;
+        padding: 4px;
+    }
+    
+    .language-selector {
+        font-size: 1rem;
+        padding: 2px 4px;
+    }
+    .subscriber-details {
+        padding: var(--spacing-xs);
+    }
+    
+    .detail-row {
+        font-size: 0.9rem;
+        padding: var(--spacing-xs) 0;
+    }
+    
+    .detail-label {
+        font-size: 0.9rem;
+        margin-right: var(--spacing-xs);
+    }
+    
+    .detail-value {
+        font-size: 0.9rem;
+    }
+    .service-section button {
+        font-size: 0.85em;
+        padding: var(--spacing-xs);
+    }
+}
+
+/* Старые стили user-info удалены, так как имя теперь в верхней панели */
+
+/* style.css */
+
+/* ... (ваш существующий CSS-код) ... */
+
+/* --- Стили для плавного скрытия/отображения поля улиц --- */
+.street-form-group-hidden {
+    max-height: 0; 
+    opacity: 0;    
+    overflow: hidden; 
+    margin-top: 0;   
+    margin-bottom: 0; 
+    padding-top: 0; 
+    padding-bottom: 0; 
+    transition: max-height 0.4s ease-out, opacity 0.4s ease-out, margin 0.4s ease-out, padding 0.4s ease-out;
+}
+
+.street-form-group-visible {
+    max-height: 120px; /* Убедитесь, что это достаточно для select + label */
+    opacity: 1;    
+    margin-top: var(--spacing-md); 
+    margin-bottom: var(--spacing-md); 
+    padding-top: initial; /* Или конкретное значение, если вам нужно */
+    padding-bottom: initial; /* Или конкретное значение, если вам нужно */
+    transition: max-height 0.4s ease-in, opacity 0.4s ease-in, margin 0.4s ease-in, padding 0.4s ease-in;
+}
+
+/* --- НОВОЕ: Стили для плавного скрытия/отображения группы полей дома и квартиры --- */
+.house-flat-group-hidden {
+    max-height: 0; 
+    opacity: 0;    
+    overflow: hidden; 
+    margin-top: 0;   
+    margin-bottom: 0; 
+    padding-top: 0; 
+    padding-bottom: 0; 
+    transition: max-height 0.4s ease-out, opacity 0.4s ease-out, margin 0.4s ease-out, padding 0.4s ease-out;
+    /* Убедитесь, что внутренние form-group также скрыты, чтобы избежать проблем с отступами */
+    display: block; /* Важно: для max-height и transition, родитель должен быть блочным */
+}
+
+.house-flat-group-hidden .form-group {
+    display: none; /* Скрываем содержимое, когда группа скрыта */
+}
+
+
+.house-flat-group-visible {
+    max-height: 250px; /* Увеличьте это значение, если два form-group не влезают (label + input) */
+    opacity: 1;    
+    margin-top: var(--spacing-md); 
+    margin-bottom: var(--spacing-md); 
+    padding-top: initial; /* Или конкретное значение */
+    padding-bottom: initial; /* Или конкретное значение */
+    transition: max-height 0.4s ease-in, opacity 0.4s ease-in, margin 0.4s ease-in, padding 0.4s ease-in;
+    display: block; /* Важно */
+}
+
+.house-flat-group-visible .form-group {
+    display: block; /* Показываем содержимое, когда группа видна */
+}
+
+
+/* --- Медиа-запросы (убедитесь, что эти правила идут после общих) --- */
+@media (max-width: 768px) {
+    /* ... (существующие правила) ... */
+
+    /* Адаптивные стили для групп скрытых полей */
+    .street-form-group-visible,
+    .house-flat-group-visible {
+        max-height: 200px; /* Может потребоваться корректировка */
+        margin-top: var(--spacing-md); /* Или как вам удобно на мобильных */
+        margin-bottom: var(--spacing-md);
+    }
+}
+
+@media (max-width: 480px) {
+    /* ... (существующие правила) ... */
+}
+
+
+/* style.css */
+
+/* ... (существующие стили) ... */
+
+/* НОВЫЕ СТИЛИ ДЛЯ ВЫБОРА ЯЗЫКА */
+.language-selector-container {
+    position: absolute; /* Позиционируем относительно ближайшего позиционированного предка */
+    top: var(--spacing-md);
+    right: var(--spacing-md);
+    z-index: 1000; /* Убедитесь, что он поверх других элементов */
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xxs);
+}
+
+/* Специальные стили для селекторов на разных экранах */
+#searchScreen .language-selector-container,
+#resultsScreen .language-selector-container {
+    position: fixed; /* Фиксированное позиционирование для экранов поиска и результатов */
+    top: var(--spacing-md);
+    right: var(--spacing-md);
+    background: rgba(255, 255, 255, 0.9); /* Полупрозрачный фон */
+    padding: var(--spacing-xs);
+    border-radius: var(--border-radius-sm);
+    box-shadow: var(--shadow-light);
+}
+
+.language-selector-container select {
+    width: auto;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    font-size: 0.9rem;
+    border-radius: var(--border-radius-sm);
+    background-color: var(--container-bg-color);
+    color: var(--text-color);
+    cursor: pointer;
+    /* Убираем стрелку по умолчанию для Chrome/Safari */
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%236c757d'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    background-size: 14px;
+    padding-right: 25px; /* Увеличиваем padding-right, чтобы стрелка не перекрывала текст */
+}
+
+.language-selector-container select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px var(--input-border-focus-color);
+}
+
+/* Стили для группы кнопок оплаты */
+.button-group {
+    display: flex;
+    flex-wrap: wrap; /* Для переноса кнопок на новую строку на маленьких экранах */
+    gap: var(--spacing-sm); /* Расстояние между кнопками */
+    margin-top: var(--spacing-sm);
+    justify-content: center; /* Центрирование кнопок */
+}
+
+.button-group .pay-button {
+    flex-grow: 1; /* Кнопки будут растягиваться */
+    min-width: 150px; /* Минимальная ширина для каждой кнопки */
+    padding: var(--spacing-sm) var(--spacing-md); /* Увеличим padding для удобства нажатия */
+    font-size: 1em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-xs);
+    font-weight: 500;
+}
+
+/* Стили для кнопок платежей */
+.pay-button[data-payment-type="cash"] {
+    background-color: var(--success-color); /* Зеленый для наличных */
+    color: white;
+    border: 1px solid var(--success-color);
+}
+
+.pay-button[data-payment-type="cash"]:hover {
+    background-color: #1e7e34; /* Темнее зеленый для ховера */
+    border-color: #1e7e34;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(40, 167, 69, 0.3);
+}
+
+.pay-button[data-payment-type="cash"]:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3);
+}
+
+.pay-button[data-payment-type="terminal"] {
+    background-color: var(--info-color); /* Синий для терминала */
+    color: white;
+    border: 1px solid var(--info-color);
+}
+
+.pay-button[data-payment-type="terminal"]:hover {
+    background-color: var(--info-hover-color); /* Темнее синий для ховера */
+    border-color: var(--info-hover-color);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 123, 255, 0.3);
+}
+
+.pay-button[data-payment-type="terminal"]:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+}
+
+/* Общий стиль для кнопки успеха (Наличные) */
+.button-success {
+    background-color: var(--success-color);
+    color: white;
+}
+
+.button-success:hover {
+    background-color: var(--success-dark-color);
+}
+
+/* Адаптивность для селектора языка */
+@media (max-width: 768px) {
+    .language-selector-container {
+        position: static; /* Статичное позиционирование на маленьких экранах */
+        margin-bottom: var(--spacing-md); /* Отступ снизу */
+        justify-content: flex-end; /* Выравнивание по правому краю */
+        width: 100%;
+    }
+    
+    /* Для экранов поиска и результатов на мобильных */
+    #searchScreen .language-selector-container,
+    #resultsScreen .language-selector-container {
+        position: static;
+        background: transparent;
+        padding: 0;
+        box-shadow: none;
+        margin-bottom: var(--spacing-sm);
+    }
+    
+    .language-selector-container select {
+        width: auto; /* Или 100%, если хотите, чтобы занимал всю ширину */
+    }
+}
+
+/* Стили для модального окна ожидания платежа */
+#paymentWaitingModal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.6);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+}
+
+.payment-waiting-content {
+    background: white;
+    padding: var(--spacing-lg);
+    border-radius: var(--border-radius-md);
+    text-align: center;
+    max-width: 90%;
+    max-height: 90%;
+    overflow-y: auto;
+    box-shadow: var(--shadow-heavy);
+    border: 1px solid var(--border-color);
+}
+
+.payment-waiting-title {
+    color: var(--heading-color);
+    margin-bottom: var(--spacing-md);
+    font-weight: 600;
+    font-size: 1.25rem;
+}
+
+.payment-waiting-message {
+    font-size: 1rem;
+    line-height: 1.5;
+    color: var(--text-color);
+    margin-bottom: var(--spacing-md);
+}
+
+.payment-waiting-spinner {
+    width: 50px;
+    height: 50px;
+    border: 5px solid #f3f3f3;
+    border-top: 5px solid #3498db;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 20px auto;
+}
+
+.payment-waiting-status {
+    color: #7f8c8d;
+    font-style: italic;
+    margin-bottom: 20px;
+}
+
+.payment-waiting-cancel {
+    margin-right: var(--spacing-sm);
+    background-color: var(--error-color);
+    color: white;
+    border: none;
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-radius: var(--border-radius-sm);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.payment-waiting-cancel:hover {
+    background-color: #c82333;
+    box-shadow: var(--shadow-medium);
+}
+
+/* Анимация спиннера */
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Утилитарные классы */
+.hidden {
+    display: none !important;
+}
+
+/* Универсальная система модальных окон */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10001;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+    overflow: hidden;
+    touch-action: none;
+}
+
+.modal-content {
+    background: white;
+    padding: 24px;
+    border-radius: 12px;
+    max-width: 90%;
+    max-height: 90%;
+    text-align: center;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    border: 1px solid #e9ecef;
+}
+
+.modal-message {
+    font-size: 16px;
+    line-height: 1.5;
+    color: #212529;
+    margin-bottom: 20px;
+    word-wrap: break-word;
+}
+
+.modal-buttons {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
+.modal-button {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 6px;
+    font-size: 16px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    min-width: 80px;
+}
+
+.modal-button.cancel {
+    background: #6c757d;
+    color: white;
+}
+
+.modal-button.cancel:hover {
+    background: #5a6268;
+}
+
+.modal-button.primary {
+    background: #ff6b35;
+    color: white;
+}
+
+.modal-button.primary:hover {
+    background: #e55a2b;
+}
+
+/* Адаптивное отображение селектора языков */
+.language-selector {
+    font-size: 16px;
+    padding: 6px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: white;
+    cursor: pointer;
+    min-width: 50px;
+    text-align: center;
+}
+
+/* Стили для опций в выпадающем списке */
+.language-selector option {
+    padding: 8px 12px;
+    font-size: 16px;
+    text-align: left;
+    min-width: 120px;
+}
+
+/* На мобильных устройствах */
+@media (max-width: 768px) {
+    .language-selector {
+        font-size: 18px;
+        padding: 10px 12px;
+        min-width: 60px;
+    }
+    
+    .language-selector option {
+        padding: 12px 16px;
+        font-size: 18px;
+        min-width: 150px;
+    }
+}
+
+/* Мобильная адаптация для модальных окон */
+@media (max-width: 768px) {
+    .modal-content {
+        margin: 20px;
+        padding: 20px;
+        max-width: calc(100% - 40px);
+        max-height: calc(100% - 40px);
+        font-size: 14px;
+    }
+    
+    .modal-message {
+        font-size: 15px;
+        line-height: 1.4;
+        margin-bottom: 16px;
+    }
+    
+    .modal-button {
+        padding: 14px 20px;
+        font-size: 15px;
+        min-width: 70px;
+    }
+    
+    .modal-buttons {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .modal-button {
+        width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    .modal-content {
+        margin: 15px;
+        padding: 16px;
+        max-width: calc(100% - 30px);
+        border-radius: 8px;
+    }
+    
+    .modal-message {
+        font-size: 14px;
+        margin-bottom: 14px;
+    }
+    
+    .modal-button {
+        padding: 12px 16px;
+        font-size: 14px;
+    }
+}

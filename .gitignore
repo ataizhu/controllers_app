@@ -1,0 +1,58 @@
+# Исключаем PDF файлы
+*.pdf
+ТЗоймоБиллингМегапэй (1).pdf
+
+# Исключаем временные файлы
+*.tmp
+*.temp
+*~
+
+# Исключаем системные файлы
+.DS_Store
+Thumbs.db
+
+# Исключаем IDE файлы
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Исключаем логи
+*.log
+
+# Исключаем конфигурационные файлы с секретами
+config.php
+config.js
+.env
+database.php
+connection.php
+
+# Исключаем файлы сессий и кеша
+sessions/
+cache/
+tmp/
+
+# Исключаем файлы загрузок
+uploads/
+files/
+
+# Исключаем резервные копии
+*.bak
+*.backup
+*.old
+
+# Исключаем файлы тестирования
+test/
+tests/
+*.test.js
+*.spec.js
+
+# Исключаем зависимости (если будут добавлены)
+node_modules/
+vendor/
+composer.lock
+package-lock.json
+
+# Исключаем файлы сборки
+dist/
+build/
