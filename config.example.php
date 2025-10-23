@@ -3,7 +3,7 @@
 // Скопируйте этот файл в config.php и заполните реальными данными
 return [
     'megapay' => [
-        'url' => 'https://core.megapay.pos.kg/json/GetToken',
+        'url' => 'http://[IP]:[PORT]/json/GetToken',
         'callback_url' => 'https://your-domain.com/settoken.php', // Замените на ваш домен
         'operator_login' => 'your-operator@example.com', // Замените на ваш логин оператора
         'system_admin_login' => 'your-system-admin', // Замените на логин администратора
