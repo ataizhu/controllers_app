@@ -735,6 +735,23 @@ function getValidToken() {
   });
 }
 
+// Функция для отправки платежа во Flutter
+function sendPaymentToFlutter(paymentData, button, details, paymentType) {
+  if (!window.flutter_inappwebview) {
+    showAlertWithKeyboardHide(getTranslationSafe("payment_flutter_error"));
+    return;
+  }
+
+  const logMessage = paymentType === "CASH" ? "💰 Отправляем наличный платеж в Flutter:" : "💳 Отправляем карточный платеж в Flutter:";
+  console.log(logMessage, paymentData);
+
+  // Показываем модальное окно ожидания
+  showPaymentWaitingModal(paymentData, button, details);
+
+  // Отправляем данные в Flutter
+  window.flutter_inappwebview.callHandler("onPayment", paymentData);
+}
+
 // Функция для запроса нового токена
 function requestNewToken() {
   return new Promise((resolve, reject) => {
@@ -1050,94 +1067,45 @@ window.renderCurrentPageResults = function renderCurrentPageResults() {
         button.textContent = getTranslationSafe("payment_processing_button");
 
         try {
-          if (paymentType === "cash") {
-            // Для наличных - сразу создаем платеж в базе
-            const finalUserId = controllerNameDisplay ? controllerNameDisplay.getAttribute('data-user-id') || '1' : '1';
+          // Определяем тип платежа для Flutter
+          const flutterPaymentType = paymentType === "cash" ? "CASH" : "CARD";
 
-            const paymentData = {
-              action: "processPayment",
-              ls: subscriber.account_number,
-              service_id: selectedServiceId,
-              service: serviceName,
-              amount: enteredAmount,
-              payment_type: "cash",
-              date: new Date().toISOString().split("T")[0],
-              controllerName: controllerName,
-              user_id: finalUserId
-            };
+          // Создаем данные платежа
+          const finalUserId = controllerNameDisplay ? controllerNameDisplay.getAttribute('data-user-id') || '1' : '1';
 
-            const response = await fetch(BASE_API_URL, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(paymentData),
+          const paymentData = {
+            action: "processPayment",
+            ls: subscriber.account_number,
+            service_id: selectedServiceId,
+            service: serviceName,
+            amount: enteredAmount,
+            payment_type: flutterPaymentType,
+            date: new Date().toISOString().split("T")[0],
+            controllerName: controllerName,
+            user_id: finalUserId
+          };
+
+          // Получаем токен для обоих типов платежей
+          getValidToken()
+            .then(token => {
+              // Добавляем токен к данным платежа
+              paymentData.megapay_token = token;
+
+              // Отправляем данные в Flutter
+              sendPaymentToFlutter(paymentData, button, details, flutterPaymentType);
+            })
+            .catch(error => {
+              console.error("❌ Ошибка получения токена:", error);
+              showAlertWithKeyboardHide("Ошибка получения токена авторизации. Попробуйте позже.");
+              button.disabled = false;
+              button.textContent = getTranslationSafe("accept_payment_button_terminal");
             });
-
-            const result = await response.json();
-
-
-            if (result.success) {
-              showAlertWithKeyboardHide(getTranslationSafe("payment_success_message"));
-
-              // Очищаем поля
-              details.querySelector(`.amount-input`).value = "";
-              details.querySelector(`.service-select`).selectedIndex = 0;
-
-              // НЕ отправляем в Flutter - сразу создали платеж
-            } else {
-              showAlertWithKeyboardHide(getTranslationSafe("payment_error_message"));
-            }
-
-          } else if (paymentType === "terminal") {
-            // Для терминала/QR - отправляем в Flutter и ждем ответа
-            const finalUserIdTerminal = controllerNameDisplay ? controllerNameDisplay.getAttribute('data-user-id') || '1' : '1';
-
-            const paymentData = {
-              ls: subscriber.account_number,
-              service_id: selectedServiceId,
-              service: serviceName,
-              amount: enteredAmount,
-              payment_type: "terminal",
-              date: new Date().toISOString().split("T")[0],
-              controllerName: controllerName,
-              user_id: finalUserIdTerminal
-            };
-
-            // Отправляем данные в Flutter
-            if (window.flutter_inappwebview) {
-              // Получаем токен и добавляем к существующим данным
-              getValidToken()
-                .then(token => {
-                  // Добавляем токен к существующему массиву paymentData
-                  paymentData.megapay_token = token;
-
-                  console.log("🔑 Отправляем данные с токеном в Flutter:", paymentData);
-
-                  // Показываем модальное окно ожидания
-                  showPaymentWaitingModal(paymentData, button, details);
-
-                  // Отправляем данные в Flutter (тот же метод, что и был)
-                  window.flutter_inappwebview.callHandler("onPayment", paymentData);
-                })
-                .catch(error => {
-                  console.error("❌ Ошибка получения токена:", error);
-                  showAlertWithKeyboardHide("Ошибка получения токена авторизации. Попробуйте позже.");
-                  button.disabled = false;
-                  button.textContent = getTranslationSafe("accept_payment_button_terminal");
-                });
-            } else {
-              showAlertWithKeyboardHide(getTranslationSafe("payment_flutter_error"));
-            }
-          }
         } catch (error) {
           console.error("Ошибка сети:", error);
           showAlertWithKeyboardHide(getTranslationSafe("payment_network_error"));
         } finally {
-          // Разблокируем кнопку только для наличных (для терминала кнопка управляется модальным окном)
-          if (paymentType === "cash") {
-            button.disabled = false;
-            button.textContent = getTranslationSafe("accept_payment_button_cash");
-          }
-          // Для терминала кнопка разблокируется в модальном окне
+          // Кнопка разблокируется в модальном окне при получении результата от Flutter
+          // Здесь не разблокируем, так как оба типа платежей отправляются во Flutter
         }
       });
     });
