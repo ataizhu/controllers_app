@@ -48,6 +48,8 @@ const translations = {
         language_english: "English",
         search_heading: "Поиск абонента",
         search_address_title: "Поиск по адресу",
+        search_by_subscriber_data_title: "Поиск по данным абонента",
+        loading_text: "Загрузка...",
         welcome_message: "Добро пожаловать,",
         // search_message_performing_search убрано
         search_message_no_subscribers_found: "По вашему запросу абоненты не найдены.",
@@ -126,6 +128,8 @@ const translations = {
         language_english: "English",
         search_heading: "Абонентти издөө",
         search_address_title: "Дареги боюнча издөө",
+        search_by_subscriber_data_title: "Абонентти издөө",
+        loading_text: "Жүктөө...",
         welcome_message: "Кош келиңиз,",
         // search_message_performing_search убрано
         search_message_no_subscribers_found: "Сурооңуз боюнча абоненттер табылган жок.",
@@ -205,6 +209,8 @@ const translations = {
         language_english: "English",
         search_heading: "Subscriber search",
         search_address_title: "Search by address",
+        search_by_subscriber_data_title: "Search by subscriber data",
+        loading_text: "Loading...",
         welcome_message: "Welcome,",
         // search_message_performing_search убрано
         search_message_no_subscribers_found: "No subscribers found for your request.",
@@ -388,6 +394,14 @@ function updateContentLanguage() {
     // Обновляем заголовок поиска по адресу
     const searchAddressTitle = document.getElementById("searchAddressTitle");
     if (searchAddressTitle) searchAddressTitle.textContent = getTranslation("search_address_title");
+
+    // Обновляем заголовок поиска по данным абонента
+    const searchBySubscriberDataTitle = document.getElementById("searchBySubscriberDataTitle");
+    if (searchBySubscriberDataTitle) searchBySubscriberDataTitle.textContent = getTranslation("search_by_subscriber_data_title");
+
+    // Обновляем текст загрузки
+    const loadingText = document.getElementById("loadingText");
+    if (loadingText) loadingText.textContent = getTranslation("loading_text");
 
     const passwordLabel = document.querySelector('label[for="password"]');
     if (passwordLabel) passwordLabel.textContent = getTranslation("password_label");

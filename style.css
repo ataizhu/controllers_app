@@ -215,20 +215,7 @@ h1, h2 {
     color: var(--primary-color);
 }
 
-.language-selector {
-    background: none;
-    border: 1px solid var(--border-color);
-    border-radius: var(--border-radius-sm);
-    padding: var(--spacing-xs) var(--spacing-sm);
-    font-size: 1.2rem;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.language-selector:hover {
-    border-color: var(--primary-color);
-    background-color: var(--background-color);
-}
+/* Старые стили language-selector удалены - используются новые ниже */
 
 #loadingMessage {
     align-items: center; 
@@ -1378,32 +1365,35 @@ select[data-selected="true"] {
     background: #e55a2b;
 }
 
-/* Адаптивное отображение селектора языков */
+/* Компактный селектор языков - только флаги */
 .language-selector {
-    font-size: 16px;
-    padding: 6px 8px;
+    width: 50px;
+    padding: 6px 4px;
     border: 1px solid #ddd;
     border-radius: 4px;
     background: white;
     cursor: pointer;
-    min-width: 50px;
+    font-size: 16px;
     text-align: center;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
 }
 
-/* Стили для опций в выпадающем списке */
+/* Опции в выпадающем списке */
 .language-selector option {
+    text-align: left;
     padding: 8px 12px;
     font-size: 16px;
-    text-align: left;
     min-width: 120px;
 }
 
-/* На мобильных устройствах */
+/* Мобильная адаптация */
 @media (max-width: 768px) {
     .language-selector {
+        width: 60px;
+        padding: 8px 6px;
         font-size: 18px;
-        padding: 10px 12px;
-        min-width: 60px;
     }
     
     .language-selector option {

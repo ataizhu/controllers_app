@@ -629,23 +629,37 @@ if (searchForm) {
 // Функция для создания платежа после подтверждения от Flutter
 async function createPaymentAfterFlutterConfirmation(paymentData) {
   try {
+    // Отладочная информация
+    console.log("🔍 Получены данные от Flutter:", paymentData);
+
+    // Проверяем обязательные поля
+    if (!paymentData.ls || !paymentData.service_id || !paymentData.amount) {
+      console.error("❌ Отсутствуют обязательные поля:", paymentData);
+      errorWaitingPayment("Отсутствуют обязательные данные для платежа");
+      return;
+    }
+
+    const requestData = {
+      action: "processPayment",
+      ls: paymentData.ls,
+      service_id: paymentData.service_id,
+      service: paymentData.service,
+      amount: paymentData.amount,
+      payment_type: "terminal",
+      date: paymentData.date,
+      user_id: paymentData.user_id
+    };
+
+    console.log("📤 Отправляем данные на сервер:", requestData);
+
     const response = await fetch(BASE_API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "processPayment",
-        ls: paymentData.ls,
-        service_id: paymentData.service_id,
-        service: paymentData.service,
-        amount: paymentData.amount,
-        payment_type: "terminal",
-        date: paymentData.date,
-        controllerName: paymentData.controllerName,
-        user_id: paymentData.user_id
-      }),
+      body: JSON.stringify(requestData),
     });
 
     const result = await response.json();
+    console.log("📥 Ответ сервера:", result);
 
     if (result.success) {
       // Успешно создали платеж - закрываем модальное окно и очищаем поля
@@ -653,12 +667,119 @@ async function createPaymentAfterFlutterConfirmation(paymentData) {
       showAlertWithKeyboardHide(getTranslationSafe("payment_terminal_success"));
     } else {
       // Ошибка создания платежа
+      console.error("❌ Ошибка сервера:", result.message);
       errorWaitingPayment("Ошибка при создании платежа: " + result.message);
     }
   } catch (error) {
     console.error("Ошибка при создании платежа после Flutter:", error);
     errorWaitingPayment("Ошибка при создании платежа");
   }
+}
+
+// Функция для получения токена через PHP endpoint
+function getValidToken() {
+  return new Promise((resolve, reject) => {
+    fetch('get_token_status.php')
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: Failed to get token status`);
+        }
+        return response.json();
+      })
+      .then(data => {
+        if (data.success && !data.isExpired) {
+          // Токен валидный
+          console.log('✅ Токен валидный:', data.token);
+          console.log(`⏰ Токен истекает через ${data.timeLeft} секунд`);
+          resolve(data.token);
+        } else if (data.success && data.isExpired) {
+          // Токен истек - пытаемся получить новый
+          console.log('🔄 Токен истек, запрашиваем новый...');
+          requestNewToken()
+            .then(newToken => {
+              console.log('✅ Новый токен получен:', newToken);
+              resolve(newToken);
+            })
+            .catch(error => {
+              console.error('❌ Не удалось получить новый токен:', error);
+              reject(error);
+            });
+        } else {
+          // Ошибка получения токена - пытаемся получить новый
+          console.log('🔄 Ошибка получения токена, запрашиваем новый...');
+          requestNewToken()
+            .then(newToken => {
+              console.log('✅ Новый токен получен:', newToken);
+              resolve(newToken);
+            })
+            .catch(error => {
+              console.error('❌ Не удалось получить новый токен:', error);
+              reject(error);
+            });
+        }
+      })
+      .catch(error => {
+        console.error('Error getting token:', error);
+        // Если не удалось получить статус, пытаемся получить новый токен
+        console.log('🔄 Не удалось получить статус токена, запрашиваем новый токен...');
+        requestNewToken()
+          .then(newToken => {
+            console.log('✅ Новый токен получен:', newToken);
+            resolve(newToken);
+          })
+          .catch(error => {
+            console.error('❌ Не удалось получить новый токен:', error);
+            reject(error);
+          });
+      });
+  });
+}
+
+// Функция для запроса нового токена
+function requestNewToken() {
+  return new Promise((resolve, reject) => {
+    console.log('🚀 Отправляем запрос на получение нового токена...');
+
+    fetch('get_token.php')
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: Failed to request new token`);
+        }
+        return response.text();
+      })
+      .then(result => {
+        console.log('📨 Запрос на новый токен отправлен, ждем сохранения...');
+
+        // Ждем немного, чтобы токен успел сохраниться
+        setTimeout(() => {
+          // Проверяем, сохранился ли новый токен через PHP endpoint
+          fetch('get_token_status.php')
+            .then(response => {
+              if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: Failed to check new token status`);
+              }
+              return response.json();
+            })
+            .then(data => {
+              if (data.success && !data.isExpired) {
+                console.log('✅ Новый токен успешно получен и валиден');
+                console.log(`⏰ Новый токен истекает через ${data.timeLeft} секунд`);
+                resolve(data.token);
+              } else {
+                reject(new Error('New token is already expired or invalid'));
+              }
+            })
+            .catch(error => {
+              console.error('❌ Ошибка проверки нового токена:', error);
+              reject(error);
+            });
+        }, 3000); // Ждем 3 секунды
+      })
+      .catch(error => {
+        console.error('❌ Ошибка запроса нового токена:', error);
+        reject(error);
+      });
+  });
 }
 
 // Глобальные функции для Flutter
@@ -983,11 +1104,26 @@ window.renderCurrentPageResults = function renderCurrentPageResults() {
 
             // Отправляем данные в Flutter
             if (window.flutter_inappwebview) {
-              // Показываем модальное окно ожидания
-              showPaymentWaitingModal(paymentData, button, details);
+              // Получаем токен и добавляем к существующим данным
+              getValidToken()
+                .then(token => {
+                  // Добавляем токен к существующему массиву paymentData
+                  paymentData.megapay_token = token;
 
-              // Отправляем данные в Flutter
-              window.flutter_inappwebview.callHandler("onPayment", paymentData);
+                  console.log("🔑 Отправляем данные с токеном в Flutter:", paymentData);
+
+                  // Показываем модальное окно ожидания
+                  showPaymentWaitingModal(paymentData, button, details);
+
+                  // Отправляем данные в Flutter (тот же метод, что и был)
+                  window.flutter_inappwebview.callHandler("onPayment", paymentData);
+                })
+                .catch(error => {
+                  console.error("❌ Ошибка получения токена:", error);
+                  showAlertWithKeyboardHide("Ошибка получения токена авторизации. Попробуйте позже.");
+                  button.disabled = false;
+                  button.textContent = getTranslationSafe("accept_payment_button_terminal");
+                });
             } else {
               showAlertWithKeyboardHide(getTranslationSafe("payment_flutter_error"));
             }

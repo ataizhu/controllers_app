@@ -337,19 +337,12 @@ try {
 
         case 'getServices':
             try {
-                // Фильтруем услуги только для Таш-Кумырского ТС
-                $query = "SELECT vs.servicename, vs.serviceid 
-                          FROM vtiger_service vs
-                          INNER JOIN vtiger_crmentity vc ON vs.serviceid = vc.crmid
-                          WHERE vc.deleted = 0
-                          AND (
-                              vs.servicename LIKE '%Таш%' 
-                              OR vs.servicename LIKE '%Кумыр%'
-                              OR vs.servicename LIKE '%Таш-Кумыр%'
-                          )
-                          ORDER BY vs.servicename ASC";
+                // Получаем услуги из таблицы cf_paid_service
+                $query = "SELECT cf_paid_serviceid, cf_paid_service 
+                          FROM vtiger_cf_paid_service 
+                          ORDER BY cf_paid_service ASC";
 
-                error_log("Executing services query with filter for Таш-Кумырское ТС");
+                error_log("Executing services query from vtiger_cf_paid_service");
                 $result = $adb->pquery($query, array());
 
                 if ($result === false) {
@@ -360,12 +353,12 @@ try {
                 $services = array();
                 while ($row = $adb->fetchByAssoc($result)) {
                     $services[] = array(
-                        'id' => $row['serviceid'],
-                        'name' => $row['servicename']
+                        'id' => $row['cf_paid_serviceid'],
+                        'name' => $row['cf_paid_service']
                     );
                 }
 
-                error_log("Found " . count($services) . " services for Таш-Кумырское ТС");
+                error_log("Found " . count($services) . " services from cf_paid_service");
                 $response = ['success' => true, 'message' => 'Услуги получены.', 'services' => $services];
             } catch (Exception $e) {
                 error_log("Error in getServices: " . $e->getMessage());
@@ -407,17 +400,19 @@ try {
                 $balance = $row['cf_balance'];
                 $municipal_enterprise = $row['cf_field_municipal_enterprise'];
 
-                if ($paymentType == 'cash') {
-                    // Создаём запись платежа для наличных
+                if ($paymentType == 'cash' || $paymentType == 'terminal') {
+                    // Создаём запись платежа (универсальный код)
                     $payment = Vtiger_Record_Model::getCleanInstance("Payments");
                     $payment->set('cf_paid_object', $estatesid);
                     $payment->set('amount', $amount);
                     $payment->set('cf_pay_date', $date);
                     $payment->set('cf_pay_type', 'Приход');
                     $payment->set('cf_status', 'Выполнен');
+
                     // Определяем тип платежа в зависимости от способа оплаты
                     $paymentTypeText = ($paymentType == 'cash') ? 'Наличные' : 'Безналичный расчет';
                     $payment->set('cf_payment_type', $paymentTypeText);
+
                     $payment->set('cf_payment_source', 'PayMob');
                     $payment->set('cf_paid_service', $service);
                     $payment->set('assigned_user_id', $userId);
@@ -432,7 +427,7 @@ try {
                     ];
 
                 } else {
-                    // Для терминала/QR - только переправляем данные без создания записи
+                    // Для других типов - только переправляем данные без создания записи
                     $response = [
                         "success" => true,
                         "message" => "Данные для QR-кода подготовлены",
