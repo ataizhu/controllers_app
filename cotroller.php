@@ -374,6 +374,7 @@ try {
             $paymentType = isset($_POST['payment_type']) ? trim($_POST['payment_type']) : null;
             $date = isset($_POST['date']) ? trim($_POST['date']) : date('Y-m-d');
             $userId = isset($_POST['user_id']) ? intval($_POST['user_id']) : 1;
+            $rnn = isset($_POST['rnn']) ? trim($_POST['rnn']) : null; // RNN от MegaPay
 
             if (empty($ls) || empty($serviceId) || $amount <= 0 || empty($paymentType)) {
                 $response = ['success' => false, 'message' => 'Неверные или отсутствующие данные для платежа.'];
@@ -416,6 +417,12 @@ try {
                     $payment->set('cf_payment_source', 'PayMob');
                     $payment->set('cf_paid_service', $service);
                     $payment->set('assigned_user_id', $userId);
+
+                    // Записываем RNN от MegaPay в cf_txnid (только для терминальных платежей)
+                    if ($paymentType == 'terminal' && !empty($rnn)) {
+                        $payment->set('cf_txnid', $rnn);
+                    }
+
                     $payment->set('mode', 'create');
                     $payment->save();
                     $paymentId = $payment->getId();
@@ -427,19 +434,10 @@ try {
                     ];
 
                 } else {
-                    // Для других типов - только переправляем данные без создания записи
+                    // Неизвестный тип платежа
                     $response = [
-                        "success" => true,
-                        "message" => "Данные для QR-кода подготовлены",
-                        "redirect_data" => [
-                            "ls" => $ls,
-                            "service_id" => $serviceId,
-                            "service" => $service,
-                            "amount" => $amount,
-                            "payment_type" => $paymentType,
-                            "date" => $date,
-                            "municipal_enterprise" => $municipal_enterprise
-                        ]
+                        "success" => false,
+                        "message" => "Неизвестный тип платежа: " . $paymentType
                     ];
                 }
 

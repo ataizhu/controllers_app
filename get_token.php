@@ -22,37 +22,66 @@ $serialNumber = isset($jsonData['serial_number']) ? trim($jsonData['serial_numbe
 
 // Получаем operator_login из БД по серийному номеру
 $operatorLogin = null;
-if ($serialNumber) {
-    try {
-        chdir(__DIR__ . '/../');
+$errorMessage = null;
 
-        if (file_exists('config.inc.php')) {
-            require_once 'config.inc.php';
-            require_once 'include/utils/utils.php';
-
-            global $adb;
-            if (!isset($adb) || !$adb) {
-                $adb = PearDatabase::getInstance();
-            }
-
-            if ($adb) {
-                $query = "SELECT operator_login FROM terminal_settings WHERE serial_number = ? LIMIT 1";
-                $result = $adb->pquery($query, array($serialNumber));
-
-                if ($adb->num_rows($result) > 0) {
-                    $row = $adb->fetchByAssoc($result);
-                    $operatorLogin = $row['operator_login'];
-                }
-            }
-        }
-    } catch (Exception $e) {
-        error_log("Error getting operator_login: " . $e->getMessage());
-    }
+// Проверяем наличие серийного номера
+if (!$serialNumber) {
+    header('Content-Type: application/json');
+    echo json_encode([
+        'success' => false,
+        'error' => 'Серийный номер терминала не передан',
+        'message' => 'Серийный номер терминала не передан. Пожалуйста, настройте терминал через кнопку настроек.'
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
 }
 
-// Если не найден в БД, используем из конфига
-if (!$operatorLogin) {
-    $operatorLogin = $config['megapay']['operator_login'];
+try {
+    chdir(__DIR__ . '/../');
+
+    if (file_exists('config.inc.php')) {
+        require_once 'config.inc.php';
+        require_once 'include/utils/utils.php';
+
+        global $adb;
+        if (!isset($adb) || !$adb) {
+            $adb = PearDatabase::getInstance();
+        }
+
+        if ($adb) {
+            $query = "SELECT operator_login FROM terminal_settings WHERE serial_number = ? LIMIT 1";
+            $result = $adb->pquery($query, array($serialNumber));
+
+            if ($adb->num_rows($result) > 0) {
+                $row = $adb->fetchByAssoc($result);
+                $operatorLogin = $row['operator_login'];
+
+                // Проверяем что operator_login не пустой
+                if (empty($operatorLogin)) {
+                    $errorMessage = 'Для данного терминала не настроен operator_login. Пожалуйста, настройте его через кнопку настроек терминала.';
+                }
+            } else {
+                $errorMessage = 'Для данного терминала не настроен operator_login. Пожалуйста, настройте его через кнопку настроек терминала.';
+            }
+        } else {
+            $errorMessage = 'Ошибка подключения к базе данных';
+        }
+    } else {
+        $errorMessage = 'Файл конфигурации не найден';
+    }
+} catch (Exception $e) {
+    error_log("Error getting operator_login: " . $e->getMessage());
+    $errorMessage = 'Ошибка получения настроек терминала: ' . $e->getMessage();
+}
+
+// Если operator_login не найден в БД - возвращаем ошибку
+if (!$operatorLogin || $errorMessage) {
+    header('Content-Type: application/json');
+    echo json_encode([
+        'success' => false,
+        'error' => $errorMessage ?: 'Operator login не найден',
+        'message' => $errorMessage ?: 'Для данного терминала не настроен operator_login. Пожалуйста, настройте его через кнопку настроек терминала.'
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
 }
 
 // Конфигурация из файла
