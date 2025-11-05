@@ -9,6 +9,10 @@ let operatorLogin = null;
 let pendingSettingsOpen = false; // Флаг для отслеживания запроса на открытие настроек
 let pendingPaymentAfterSerialNumber = null; // Данные платежа ожидающие серийный номер
 
+// Переменные для налогов
+let vat_value = 12.00; // НДС (Налог на добавленную стоимость)
+let st_value = 2.00; // НСП (Налог с продаж)
+
 // Обработчики для Flutter - объявляем сразу, чтобы были доступны до загрузки DOM
 // Обработчик получения серийного номера от Flutter (вызывается Flutter'ом после нашего запроса)
 window.getSerialNumber = function (serialNumber) {
@@ -47,12 +51,20 @@ window.getSerialNumber = function (serialNumber) {
     const paymentData = pendingPaymentAfterSerialNumber;
     pendingPaymentAfterSerialNumber = null;
 
+    console.log('💳 Обработка платежа после получения серийного номера:', serialNumber);
+
+    // Убеждаемся что terminalSerialNumber установлен
+    terminalSerialNumber = serialNumber;
+    console.log('✅ terminalSerialNumber установлен:', terminalSerialNumber);
+
     // Проверяем operator_login в БД для данного терминала
     if (typeof getOperatorLoginFromDB === 'function') {
+      console.log('🔍 Проверяем operator_login в БД для терминала:', serialNumber);
       getOperatorLoginFromDB(serialNumber)
         .then(function (login) {
           if (!login) {
             // operator_login не найден - показываем сообщение и прерываем
+            console.error('❌ operator_login не найден в БД для терминала:', serialNumber);
             if (paymentData.button) {
               paymentData.button.disabled = false;
               paymentData.button.textContent = getTranslationSafe("accept_payment_button_terminal");
@@ -65,9 +77,19 @@ window.getSerialNumber = function (serialNumber) {
           operatorLogin = login;
           console.log('✅ Operator login проверен перед оплатой:', operatorLogin);
 
+          // Сохраняем в sessionStorage для надежности
+          try {
+            sessionStorage.setItem('terminalSerialNumber', serialNumber);
+            sessionStorage.setItem('operatorLogin', login);
+          } catch (e) {
+            console.log('⚠️ Не удалось сохранить в sessionStorage:', e);
+          }
+
           // Продолжаем процесс оплаты - запрашиваем токен
+          console.log('🔑 Запрашиваем токен для платежа...');
           getValidToken()
             .then(function (token) {
+              console.log('✅ Токен получен, отправляем платеж в Flutter');
               paymentData.paymentData.megapay_token = token;
               sendPaymentToFlutter(paymentData.paymentData, paymentData.button, paymentData.details, paymentData.flutterPaymentType);
             })
@@ -1102,12 +1124,14 @@ function openTerminalSettings() {
 function requestNewToken() {
   return new Promise(function (resolve, reject) {
     console.log('🚀 Отправляем запрос на получение нового токена...');
+    console.log('📱 Текущее значение terminalSerialNumber:', terminalSerialNumber);
 
     // Проверяем наличие серийного номера
     if (!terminalSerialNumber) {
       // Пытаемся восстановить из sessionStorage
       try {
         const savedSerialNumber = sessionStorage.getItem('terminalSerialNumber');
+        console.log('📱 Пытаемся восстановить из sessionStorage:', savedSerialNumber);
         if (savedSerialNumber) {
           console.log('📱 Восстановлен серийный номер из sessionStorage:', savedSerialNumber);
           terminalSerialNumber = savedSerialNumber;
@@ -1120,14 +1144,19 @@ function requestNewToken() {
     if (!terminalSerialNumber) {
       const errorMsg = 'Серийный номер терминала не получен. Пожалуйста, настройте терминал через кнопку настроек.';
       console.error('❌', errorMsg);
+      console.error('❌ terminalSerialNumber =', terminalSerialNumber);
       reject(new Error(errorMsg));
       return;
     }
+
+    console.log('✅ Используем серийный номер для запроса токена:', terminalSerialNumber);
 
     // Формируем данные запроса с серийным номером
     const requestData = {
       serial_number: terminalSerialNumber
     };
+
+    console.log('📤 Отправляем запрос на get_token.php с данными:', requestData);
 
     fetch('get_token.php', {
       method: 'POST',
@@ -1188,24 +1217,13 @@ function requestNewToken() {
 
 // Обработчик ответа от Flutter после оплаты
 window.createPaymentAfterFlutterConfirmation = function (response) {
-  console.log("🔍 Получен ответ от MegaPay:", response);
-  console.log("🔍 Тип ответа:", typeof response);
-  console.log("🔍 JSON ответа:", JSON.stringify(response));
-
-  // Закрываем модальное окно ожидания
-  const waitingModal = document.getElementById("paymentWaitingModal");
-  if (waitingModal) {
-    waitingModal.remove();
-  }
-
-  // Проверяем успешность оплаты
-  // response может быть объектом или строкой JSON
+  // Парсим ответ если он строка
   let responseData = response;
   if (typeof response === 'string') {
     try {
       responseData = JSON.parse(response);
     } catch (e) {
-      console.error('Ошибка парсинга JSON:', e);
+      console.error('❌ Ошибка парсинга JSON:', e);
       showPaymentError("Ошибка формата ответа от платежной системы");
       // Разблокируем кнопку
       if (currentWaitingPayment && currentWaitingPayment.button) {
@@ -1216,6 +1234,23 @@ window.createPaymentAfterFlutterConfirmation = function (response) {
       return;
     }
   }
+
+  // Логируем RNN если он есть
+  if (responseData && responseData.transaction &&
+    responseData.transaction.instrumentSpecificData &&
+    responseData.transaction.instrumentSpecificData.rrn) {
+    console.log('📋 RNN от терминала: ' + responseData.transaction.instrumentSpecificData.rrn);
+  } else if (responseData && responseData.result && responseData.result.RNN) {
+    console.log('📋 RNN от терминала: ' + responseData.result.RNN);
+  }
+
+  // Закрываем модальное окно ожидания
+  const waitingModal = document.getElementById("paymentWaitingModal");
+  if (waitingModal) {
+    waitingModal.remove();
+  }
+
+  // Проверяем успешность оплаты
 
   // Проверяем формат ошибки с полями error, errorCode, message
   if (responseData && responseData.error && responseData.errorCode !== undefined) {
@@ -1234,7 +1269,6 @@ window.createPaymentAfterFlutterConfirmation = function (response) {
 
   if (responseData && responseData.result && responseData.result.code === 0) {
     // Оплата успешна - создаем платеж в системе
-    console.log("✅ Оплата успешна, создаем платеж в системе");
     createPaymentInSystem(responseData);
   } else {
     // Ошибка оплаты
@@ -1266,11 +1300,28 @@ function createPaymentInSystem(megapayResponse) {
   const paymentData = currentWaitingPayment.paymentData;
 
   // Получаем RNN из ответа MegaPay
-  const rnn = megapayResponse && megapayResponse.result && megapayResponse.result.RNN
-    ? megapayResponse.result.RNN
-    : null;
+  // RNN может быть в разных местах в зависимости от формата ответа
+  let rnn = null;
 
-  console.log("📋 RNN от MegaPay:", rnn);
+  // Проверяем новый формат: transaction.instrumentSpecificData.rrn
+  if (megapayResponse &&
+    megapayResponse.transaction &&
+    megapayResponse.transaction.instrumentSpecificData &&
+    megapayResponse.transaction.instrumentSpecificData.rrn) {
+    rnn = megapayResponse.transaction.instrumentSpecificData.rrn;
+  }
+  // Проверяем старый формат: result.RNN (для обратной совместимости)
+  else if (megapayResponse &&
+    megapayResponse.result &&
+    megapayResponse.result.RNN) {
+    rnn = megapayResponse.result.RNN;
+  }
+
+  if (rnn) {
+    console.log("📋 RNN от терминала:", rnn);
+  } else {
+    console.warn("⚠️ RNN не найден в ответе от терминала");
+  }
 
   // Формируем данные для создания платежа
   const requestData = {
@@ -1285,8 +1336,6 @@ function createPaymentInSystem(megapayResponse) {
     rnn: rnn // Добавляем RNN от MegaPay
   };
 
-  console.log("📤 Отправляем данные на сервер для создания платежа:", requestData);
-
   // Отправляем запрос на создание платежа
   fetch(BASE_API_URL, {
     method: "POST",
@@ -1297,8 +1346,6 @@ function createPaymentInSystem(megapayResponse) {
       return response.json();
     })
     .then(function (data) {
-      console.log("📥 Ответ от сервера:", data);
-
       if (data.success) {
         // Платеж успешно создан
         showPaymentSuccess("Платеж успешно создан!");
@@ -1701,56 +1748,8 @@ window.renderCurrentPageResults = function renderCurrentPageResults() {
           // Определяем тип платежа для Flutter
           const flutterPaymentType = paymentType === "cash" ? "CASH" : "CARD";
 
-          // Для терминальных платежей сначала получаем серийный номер, потом проверяем operator_login в БД
-          if (flutterPaymentType === "CARD") {
-            // Создаем данные платежа заранее
-            const finalUserId = controllerNameDisplay ? controllerNameDisplay.getAttribute('data-user-id') || '1' : '1';
-            const today = new Date();
-            const year = today.getFullYear();
-            const month = today.getMonth() + 1;
-            const day = today.getDate();
-            const currentDate = year + '-' + (month < 10 ? '0' + month : month) + '-' + (day < 10 ? '0' + day : day);
-
-            const paymentData = {
-              action: "processPayment",
-              ls: subscriber.account_number,
-              service_id: selectedServiceId,
-              service: serviceName,
-              amount: enteredAmount,
-              payment_type: flutterPaymentType,
-              date: currentDate,
-              controllerName: controllerName,
-              user_id: finalUserId
-            };
-
-            // Всегда запрашиваем серийный номер у Flutter для проверки в БД
-            if (window.flutter_inappwebview) {
-              // Сохраняем данные платежа для продолжения после получения серийного номера
-              pendingPaymentAfterSerialNumber = {
-                paymentData: paymentData,
-                button: button,
-                details: details,
-                flutterPaymentType: flutterPaymentType
-              };
-
-              // Запрашиваем серийный номер у Flutter
-              window.flutter_inappwebview.callHandler("getSerialNumber");
-
-              // Показываем сообщение что ждем серийный номер
-              showAlertWithKeyboardHide('Запрашиваем серийный номер терминала у Flutter...');
-              return; // Прерываем выполнение, продолжим после получения серийного номера
-            } else {
-              button.disabled = false;
-              button.textContent = getTranslationSafe("accept_payment_button_terminal");
-              showAlertWithKeyboardHide('Серийный номер терминала не получен. Flutter недоступен.');
-              return; // Прерываем выполнение
-            }
-          }
-
-          // Создаем данные платежа
+          // Создаем данные платежа (общие для всех типов платежей)
           const finalUserId = controllerNameDisplay ? controllerNameDisplay.getAttribute('data-user-id') || '1' : '1';
-
-          // Формируем дату в локальном часовом поясе (совместимость Android 7)
           const today = new Date();
           const year = today.getFullYear();
           const month = today.getMonth() + 1;
@@ -1766,8 +1765,38 @@ window.renderCurrentPageResults = function renderCurrentPageResults() {
             payment_type: flutterPaymentType,
             date: currentDate,
             controllerName: controllerName,
-            user_id: finalUserId
+            user_id: finalUserId,
+            vat_value: vat_value, // НДС (Налог на добавленную стоимость)
+            st_value: st_value  // НСП (Налог с продаж)
           };
+
+          // Для терминальных платежей сначала получаем серийный номер, потом проверяем operator_login в БД
+          if (flutterPaymentType === "CARD") {
+            console.log('💳 Нажата кнопка оплаты через терминал (CARD)');
+            console.log('📋 Данные платежа подготовлены:', paymentData);
+
+            // Всегда запрашиваем серийный номер у Flutter для проверки в БД
+            if (window.flutter_inappwebview) {
+              // Сохраняем данные платежа для продолжения после получения серийного номера
+              pendingPaymentAfterSerialNumber = {
+                paymentData: paymentData,
+                button: button,
+                details: details,
+                flutterPaymentType: flutterPaymentType
+              };
+
+              console.log('📱 Запрашиваем серийный номер терминала у Flutter...');
+              // Запрашиваем серийный номер у Flutter
+              window.flutter_inappwebview.callHandler("getSerialNumber");
+
+              return; // Прерываем выполнение, продолжим после получения серийного номера
+            } else {
+              console.error('❌ Flutter недоступен');
+              button.disabled = false;
+              button.textContent = getTranslationSafe("accept_payment_button_terminal");
+              return; // Прерываем выполнение
+            }
+          }
 
           // Для наличных платежей не нужен токен - сразу отправляем в Flutter
           if (flutterPaymentType === "CASH") {
