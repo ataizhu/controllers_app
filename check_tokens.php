@@ -1,4 +1,7 @@
 <?php
+// Устанавливаем часовой пояс GMT+6
+date_default_timezone_set('Asia/Bishkek');
+
 echo "<h2>Проверка полученных токенов</h2>";
 
 if (file_exists('tokens.json')) {

@@ -215,6 +215,18 @@ h1, h2 {
     color: var(--primary-color);
 }
 
+.settings-button {
+    color: var(--text-color);
+    display: inline-flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+.settings-button:hover {
+    background-color: var(--background-color);
+    color: var(--primary-color);
+}
+
 /* Старые стили language-selector удалены - используются новые ниже */
 
 #loadingMessage {

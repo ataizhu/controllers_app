@@ -1,7 +1,60 @@
 // app.js
 // Конфигурация загружается из config.js
-const BASE_API_URL = window.CONFIG?.BASE_API_URL || "./cotroller.php";
-const CHECK_PASS_URL = window.CONFIG?.CHECK_PASS_URL || "../checkPass.php";
+const BASE_API_URL = (window.CONFIG && window.CONFIG.BASE_API_URL) ? window.CONFIG.BASE_API_URL : "./cotroller.php";
+const CHECK_PASS_URL = (window.CONFIG && window.CONFIG.CHECK_PASS_URL) ? window.CONFIG.CHECK_PASS_URL : "../checkPass.php";
+
+// Глобальные переменные для терминала
+let terminalSerialNumber = null;
+let operatorLogin = null;
+
+// Обработчики для Flutter - объявляем сразу, чтобы были доступны до загрузки DOM
+// Обработчик получения серийного номера от Flutter (вызывается Flutter'ом через getSerialNumber)
+window.getSerialNumber = function (serialNumber) {
+  console.log('📱 Получен серийный номер терминала от Flutter:', serialNumber);
+  terminalSerialNumber = serialNumber;
+
+  // Сохраняем в sessionStorage для надежности
+  try {
+    sessionStorage.setItem('terminalSerialNumber', serialNumber);
+  } catch (e) {
+    console.log('⚠️ Не удалось сохранить серийный номер в sessionStorage:', e);
+  }
+
+  // Проверяем есть ли operator_login для этого терминала
+  // Используем setTimeout чтобы убедиться что DOM загружен
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function () {
+      handleSerialNumber(serialNumber);
+    });
+  } else {
+    handleSerialNumber(serialNumber);
+  }
+};
+
+// Функция обработки серийного номера (вызывается после загрузки DOM)
+function handleSerialNumber(serialNumber) {
+  if (typeof getOperatorLoginFromDB === 'function') {
+    getOperatorLoginFromDB(serialNumber)
+      .then(function (login) {
+        if (login) {
+          operatorLogin = login;
+          console.log('✅ Operator login загружен из БД:', login);
+        } else {
+          console.log('⚠️ Operator login не найден для терминала:', serialNumber);
+          console.log('📝 Operator login можно настроить через кнопку настроек терминала');
+          // Не показываем окно автоматически, только по кнопке
+        }
+      });
+  } else {
+    console.log('⚠️ Функция getOperatorLoginFromDB еще не загружена, повторим попытку через 100мс');
+    setTimeout(function () {
+      handleSerialNumber(serialNumber);
+    }, 100);
+  }
+}
+
+// Алиас для совместимости (если Flutter будет вызывать старое имя)
+window.getTerminalSerialNumber = window.getSerialNumber;
 
 const loadingScreen = document.getElementById("loadingMessage");
 const loginScreen = document.getElementById("loginScreen");
@@ -43,8 +96,9 @@ let currentPage = 1;
 // Языковая система вынесена в отдельный файл language.js
 
 // Вспомогательная функция для безопасного получения переводов
-function getTranslationSafe(key, fallback = null) {
-  if (window.LanguageSystem?.getTranslation) {
+function getTranslationSafe(key, fallback) {
+  if (fallback === undefined) fallback = null;
+  if (window.LanguageSystem && window.LanguageSystem.getTranslation) {
     return window.LanguageSystem.getTranslation(key);
   }
 
@@ -171,7 +225,7 @@ const ModalSystem = {
       document.body.appendChild(tempInput);
 
       let originalType = null;
-      if (activeElement?.tagName === 'INPUT' && activeElement.type !== 'hidden') {
+      if (activeElement && activeElement.tagName === 'INPUT' && activeElement.type !== 'hidden') {
         originalType = activeElement.type;
         activeElement.type = 'hidden';
       }
@@ -219,11 +273,15 @@ const ModalSystem = {
       buttonContainer.appendChild(btn);
     });
 
-    modal.addEventListener('click', (e) => {
+    modal.addEventListener('click', function (e) {
       if (e.target === modal) {
         modal.remove();
-        const cancelBtn = buttons.find(b => b.class?.includes('cancel'));
-        if (cancelBtn?.callback) cancelBtn.callback();
+        var cancelBtn = buttons.find(function (b) {
+          return b.class && b.class.includes('cancel');
+        });
+        if (cancelBtn && cancelBtn.callback) {
+          cancelBtn.callback();
+        }
       }
     });
 
@@ -301,7 +359,6 @@ async function checkPhoneAuth() {
 
     const data = await safeJsonParse(response);
 
-
     if (data.success && data.data !== "empty" && data.data.username) {
       setControllerName(data.data.fullname || data.data.username, data.data.vtiger_user_id || '1');
       showScreen("searchScreen");
@@ -329,6 +386,41 @@ if (loginForm) {
       displayMessage(messageDiv, window.LanguageSystem.getTranslationSafe("login_error_id_not_defined"), "error");
       showScreen("loginScreen");
       return;
+    }
+
+    // Проверяем серийный номер терминала и operator_login
+    // Восстанавливаем из sessionStorage если потерян
+    if (!terminalSerialNumber) {
+      try {
+        const savedSerialNumber = sessionStorage.getItem('terminalSerialNumber');
+        if (savedSerialNumber) {
+          console.log('📱 Восстановлен серийный номер из sessionStorage при логине:', savedSerialNumber);
+          terminalSerialNumber = savedSerialNumber;
+        }
+      } catch (e) {
+        console.log('⚠️ Не удалось прочитать sessionStorage:', e);
+      }
+    }
+
+    // Если есть серийный номер - проверяем operator_login
+    if (terminalSerialNumber) {
+      try {
+        console.log('🔍 Проверка operator_login для терминала:', terminalSerialNumber);
+        const operatorLoginFromDB = await getOperatorLoginFromDB(terminalSerialNumber);
+        if (!operatorLoginFromDB) {
+          displayMessage(messageDiv, 'Для данного терминала не настроен operator_login. Пожалуйста, настройте его через кнопку настроек терминала.', "error");
+          showScreen("loginScreen");
+          return;
+        }
+        // Сохраняем operator_login в глобальную переменную
+        operatorLogin = operatorLoginFromDB;
+        console.log('✅ Operator login проверен при логине:', operatorLogin);
+      } catch (error) {
+        console.error('❌ Ошибка проверки operator_login:', error);
+        displayMessage(messageDiv, 'Ошибка проверки настроек терминала. Попробуйте еще раз.', "error");
+        showScreen("loginScreen");
+        return;
+      }
     }
 
     try {
@@ -624,113 +716,18 @@ if (searchForm) {
   });
 }
 
-// Функция processPayment удалена - используется прямая логика в обработчиках кнопок
-
-// Функция для создания платежа после подтверждения от Flutter
-async function createPaymentAfterFlutterConfirmation(paymentData) {
-  try {
-    // Отладочная информация
-    console.log("🔍 Получены данные от Flutter:", paymentData);
-
-    // Проверяем обязательные поля
-    if (!paymentData.ls || !paymentData.service_id || !paymentData.amount) {
-      console.error("❌ Отсутствуют обязательные поля:", paymentData);
-      errorWaitingPayment("Отсутствуют обязательные данные для платежа");
-      return;
-    }
-
-    const requestData = {
-      action: "processPayment",
-      ls: paymentData.ls,
-      service_id: paymentData.service_id,
-      service: paymentData.service,
-      amount: paymentData.amount,
-      payment_type: "terminal",
-      date: paymentData.date,
-      user_id: paymentData.user_id
-    };
-
-    console.log("📤 Отправляем данные на сервер:", requestData);
-
-    const response = await fetch(BASE_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(requestData),
-    });
-
-    const result = await response.json();
-    console.log("📥 Ответ сервера:", result);
-
-    if (result.success) {
-      // Успешно создали платеж - закрываем модальное окно и очищаем поля
-      completeWaitingPayment();
-      showAlertWithKeyboardHide(getTranslationSafe("payment_terminal_success"));
-    } else {
-      // Ошибка создания платежа
-      console.error("❌ Ошибка сервера:", result.message);
-      errorWaitingPayment("Ошибка при создании платежа: " + result.message);
-    }
-  } catch (error) {
-    console.error("Ошибка при создании платежа после Flutter:", error);
-    errorWaitingPayment("Ошибка при создании платежа");
-  }
-}
-
-// Функция для получения токена через PHP endpoint
+// Функция для получения токена - ВСЕГДА получает новый токен
 function getValidToken() {
-  return new Promise((resolve, reject) => {
-    fetch('get_token_status.php')
-      .then(response => {
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: Failed to get token status`);
-        }
-        return response.json();
+  return new Promise(function (resolve, reject) {
+    console.log('🔄 Запрашиваем новый токен для платежа...');
+    requestNewToken()
+      .then(function (newToken) {
+        console.log('✅ Новый токен получен:', newToken);
+        resolve(newToken);
       })
-      .then(data => {
-        if (data.success && !data.isExpired) {
-          // Токен валидный
-          console.log('✅ Токен валидный:', data.token);
-          console.log(`⏰ Токен истекает через ${data.timeLeft} секунд`);
-          resolve(data.token);
-        } else if (data.success && data.isExpired) {
-          // Токен истек - пытаемся получить новый
-          console.log('🔄 Токен истек, запрашиваем новый...');
-          requestNewToken()
-            .then(newToken => {
-              console.log('✅ Новый токен получен:', newToken);
-              resolve(newToken);
-            })
-            .catch(error => {
-              console.error('❌ Не удалось получить новый токен:', error);
-              reject(error);
-            });
-        } else {
-          // Ошибка получения токена - пытаемся получить новый
-          console.log('🔄 Ошибка получения токена, запрашиваем новый...');
-          requestNewToken()
-            .then(newToken => {
-              console.log('✅ Новый токен получен:', newToken);
-              resolve(newToken);
-            })
-            .catch(error => {
-              console.error('❌ Не удалось получить новый токен:', error);
-              reject(error);
-            });
-        }
-      })
-      .catch(error => {
-        console.error('Error getting token:', error);
-        // Если не удалось получить статус, пытаемся получить новый токен
-        console.log('🔄 Не удалось получить статус токена, запрашиваем новый токен...');
-        requestNewToken()
-          .then(newToken => {
-            console.log('✅ Новый токен получен:', newToken);
-            resolve(newToken);
-          })
-          .catch(error => {
-            console.error('❌ Не удалось получить новый токен:', error);
-            reject(error);
-          });
+      .catch(function (error) {
+        console.error('❌ Не удалось получить новый токен:', error);
+        reject(error);
       });
   });
 }
@@ -752,47 +749,260 @@ function sendPaymentToFlutter(paymentData, button, details, paymentType) {
   window.flutter_inappwebview.callHandler("onPayment", paymentData);
 }
 
+// Функция для получения operator_login из БД
+function getOperatorLoginFromDB(serialNumber) {
+  return new Promise(function (resolve, reject) {
+    if (!serialNumber) {
+      resolve(null);
+      return;
+    }
+
+    fetch('terminal_settings.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'getOperatorLogin',
+        serial_number: serialNumber
+      })
+    })
+      .then(function (response) {
+        return response.json();
+      })
+      .then(function (data) {
+        if (data.success && data.operator_login) {
+          console.log('✅ Operator login найден для терминала:', serialNumber);
+          resolve(data.operator_login);
+        } else {
+          console.log('⚠️ Operator login не найден для терминала:', serialNumber);
+          resolve(null);
+        }
+      })
+      .catch(function (error) {
+        console.error('❌ Ошибка получения operator_login:', error);
+        resolve(null);
+      });
+  });
+}
+
+// Функция для сохранения operator_login в БД
+function saveOperatorLogin(serialNumber, operatorLogin) {
+  return new Promise(function (resolve, reject) {
+    fetch('terminal_settings.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'saveOperatorLogin',
+        serial_number: serialNumber,
+        operator_login: operatorLogin
+      })
+    })
+      .then(function (response) {
+        return response.json();
+      })
+      .then(function (data) {
+        if (data.success) {
+          console.log('✅ Operator login сохранен');
+          resolve(true);
+        } else {
+          reject(new Error(data.message || 'Ошибка сохранения'));
+        }
+      })
+      .catch(function (error) {
+        reject(error);
+      });
+  });
+}
+
+// Функция для показа окна настройки operator_login
+function showOperatorLoginSettings(serialNumber) {
+  if (!serialNumber) {
+    console.log('⚠️ Серийный номер терминала не передан');
+    ModalSystem.alert('Серийный номер терминала еще не получен от Flutter. Пожалуйста, подождите пока Flutter отправит серийный номер терминала.');
+    return;
+  }
+
+  // Загружаем operator_login из БД перед показом окна
+  getOperatorLoginFromDB(serialNumber)
+    .then(function (login) {
+      // После получения данных показываем модальное окно
+      ModalSystem.hideKeyboard(function () {
+        const modal = document.createElement('div');
+        modal.id = 'operatorLoginModal';
+        modal.className = 'modal-overlay';
+
+        const content = document.createElement('div');
+        content.className = 'modal-content';
+
+        const title = document.createElement('h2');
+        title.textContent = 'Настройка терминала';
+        title.style.cssText = 'margin: 0 0 15px 0;';
+
+        const message = document.createElement('p');
+        message.textContent = 'Серийный номер терминала: ' + serialNumber;
+        message.style.cssText = 'margin: 0 0 15px 0; color: #666;';
+
+        const form = document.createElement('div');
+
+        const label = document.createElement('label');
+        label.textContent = 'Operator Login (email):';
+        label.style.cssText = 'display: block; margin-bottom: 5px; font-weight: bold;';
+
+        const input = document.createElement('input');
+        input.type = 'email';
+        input.id = 'operatorLoginInput';
+        // Устанавливаем значение из БД, если оно есть
+        if (login) {
+          input.value = login;
+          operatorLogin = login; // Обновляем глобальную переменную
+        }
+        input.style.cssText = 'width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 4px;';
+
+        const buttonContainer = document.createElement('div');
+        buttonContainer.className = 'modal-buttons';
+
+        const saveBtn = document.createElement('button');
+        saveBtn.textContent = 'Сохранить';
+        saveBtn.className = 'modal-button primary';
+        saveBtn.onclick = function () {
+          const loginValue = input.value.trim();
+
+          if (!loginValue) {
+            ModalSystem.alert('Введите operator login');
+            return;
+          }
+
+          saveBtn.disabled = true;
+          saveBtn.textContent = 'Сохранение...';
+
+          saveOperatorLogin(serialNumber, loginValue)
+            .then(function () {
+              operatorLogin = loginValue;
+              terminalSerialNumber = serialNumber; // Обновляем серийный номер при сохранении
+
+              // Сохраняем в sessionStorage для надежности
+              try {
+                sessionStorage.setItem('terminalSerialNumber', serialNumber);
+                sessionStorage.setItem('operatorLogin', loginValue);
+              } catch (e) {
+                console.log('⚠️ Не удалось сохранить в sessionStorage:', e);
+              }
+
+              console.log('✅ Operator login и серийный номер сохранены:', loginValue, serialNumber);
+              modal.remove();
+              ModalSystem.alert('Настройки сохранены');
+            })
+            .catch(function (error) {
+              ModalSystem.alert('Ошибка сохранения: ' + error.message);
+              saveBtn.disabled = false;
+              saveBtn.textContent = 'Сохранить';
+            });
+        };
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.textContent = 'Отмена';
+        cancelBtn.className = 'modal-button';
+        cancelBtn.onclick = function () {
+          modal.remove();
+        };
+
+        buttonContainer.appendChild(cancelBtn);
+        buttonContainer.appendChild(saveBtn);
+
+        form.appendChild(label);
+        form.appendChild(input);
+
+        content.appendChild(title);
+        content.appendChild(message);
+        content.appendChild(form);
+        content.appendChild(buttonContainer);
+        modal.appendChild(content);
+        document.body.appendChild(modal);
+
+        input.focus();
+      });
+    })
+    .catch(function (error) {
+      console.error('❌ Ошибка загрузки operator_login:', error);
+      ModalSystem.alert('Ошибка загрузки настроек терминала');
+    });
+}
+
+// Функция для ручного открытия настроек терминала (можно вызвать из кнопки)
+function openTerminalSettings() {
+  console.log('🔧 Открытие настроек терминала. terminalSerialNumber:', terminalSerialNumber, 'operatorLogin:', operatorLogin);
+
+  // Пытаемся восстановить серийный номер из sessionStorage, если он потерян
+  if (!terminalSerialNumber) {
+    try {
+      const savedSerialNumber = sessionStorage.getItem('terminalSerialNumber');
+      if (savedSerialNumber) {
+        console.log('📱 Восстановлен серийный номер из sessionStorage:', savedSerialNumber);
+        terminalSerialNumber = savedSerialNumber;
+      }
+    } catch (e) {
+      console.log('⚠️ Не удалось прочитать sessionStorage:', e);
+    }
+  }
+
+  if (terminalSerialNumber) {
+    showOperatorLoginSettings(terminalSerialNumber);
+  } else {
+    console.log('⚠️ Серийный номер терминала еще не получен от Flutter');
+    ModalSystem.alert('Серийный номер терминала еще не получен от Flutter. Пожалуйста, подождите пока Flutter отправит серийный номер терминала.');
+  }
+}
+
 // Функция для запроса нового токена
 function requestNewToken() {
-  return new Promise((resolve, reject) => {
+  return new Promise(function (resolve, reject) {
     console.log('🚀 Отправляем запрос на получение нового токена...');
 
-    fetch('get_token.php')
-      .then(response => {
+    // Формируем данные запроса с серийным номером
+    const requestData = {};
+    if (terminalSerialNumber) {
+      requestData.serial_number = terminalSerialNumber;
+    }
+
+    fetch('get_token.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestData)
+    })
+      .then(function (response) {
         if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: Failed to request new token`);
+          throw new Error('HTTP ' + response.status + ': Failed to request new token');
         }
-        return response.text();
+        return response.json();
       })
-      .then(result => {
+      .then(function (result) {
         console.log('📨 Запрос на новый токен отправлен, ждем сохранения...');
 
         // Ждем немного, чтобы токен успел сохраниться
-        setTimeout(() => {
+        setTimeout(function () {
           // Проверяем, сохранился ли новый токен через PHP endpoint
           fetch('get_token_status.php')
-            .then(response => {
+            .then(function (response) {
               if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: Failed to check new token status`);
+                throw new Error('HTTP ' + response.status + ': Failed to check new token status');
               }
               return response.json();
             })
-            .then(data => {
+            .then(function (data) {
               if (data.success && !data.isExpired) {
                 console.log('✅ Новый токен успешно получен и валиден');
-                console.log(`⏰ Новый токен истекает через ${data.timeLeft} секунд`);
+                console.log('⏰ Новый токен истекает через ' + data.timeLeft + ' секунд');
                 resolve(data.token);
               } else {
                 reject(new Error('New token is already expired or invalid'));
               }
             })
-            .catch(error => {
+            .catch(function (error) {
               console.error('❌ Ошибка проверки нового токена:', error);
               reject(error);
             });
         }, 3000); // Ждем 3 секунды
       })
-      .catch(error => {
+      .catch(function (error) {
         console.error('❌ Ошибка запроса нового токена:', error);
         reject(error);
       });
@@ -800,8 +1010,226 @@ function requestNewToken() {
 }
 
 // Глобальные функции для Flutter
-window.createPaymentAfterFlutterConfirmation = createPaymentAfterFlutterConfirmation;
-window.errorWaitingPayment = errorWaitingPayment;
+// window.createPaymentAfterFlutterConfirmation = createPaymentAfterFlutterConfirmation;
+// window.errorWaitingPayment = errorWaitingPayment;
+
+// Обработчик ответа от Flutter после оплаты
+window.createPaymentAfterFlutterConfirmation = function (response) {
+  console.log("🔍 Получен ответ от MegaPay:", response);
+  console.log("🔍 Тип ответа:", typeof response);
+  console.log("🔍 JSON ответа:", JSON.stringify(response));
+
+  // Закрываем модальное окно ожидания
+  const waitingModal = document.getElementById("paymentWaitingModal");
+  if (waitingModal) {
+    waitingModal.remove();
+  }
+
+  // Проверяем успешность оплаты
+  // response может быть объектом или строкой JSON
+  let responseData = response;
+  if (typeof response === 'string') {
+    try {
+      responseData = JSON.parse(response);
+    } catch (e) {
+      console.error('Ошибка парсинга JSON:', e);
+      showPaymentError("Ошибка формата ответа от платежной системы");
+      currentWaitingPayment = null;
+      return;
+    }
+  }
+
+  if (responseData && responseData.result && responseData.result.code === 0) {
+    // Оплата успешна - создаем платеж в системе
+    console.log("✅ Оплата успешна, создаем платеж в системе");
+    createPaymentInSystem(responseData);
+  } else {
+    // Ошибка оплаты
+    console.error("❌ Ошибка оплаты:", responseData);
+    const errorMessage = responseData && responseData.result ? responseData.result.description : "Ошибка оплаты";
+    showPaymentError(errorMessage);
+  }
+
+  // Разблокируем кнопку
+  if (currentWaitingPayment && currentWaitingPayment.button) {
+    currentWaitingPayment.button.disabled = false;
+    currentWaitingPayment.button.textContent = getTranslationSafe("accept_payment_button_terminal");
+  }
+
+  // Очищаем данные ожидающего платежа
+  currentWaitingPayment = null;
+};
+
+// Функция создания платежа в системе
+function createPaymentInSystem(megapayResponse) {
+  if (!currentWaitingPayment || !currentWaitingPayment.paymentData) {
+    console.error("❌ Нет данных о платеже");
+    showPaymentError("Ошибка: данные платежа не найдены");
+    return;
+  }
+
+  const paymentData = currentWaitingPayment.paymentData;
+
+  // Формируем данные для создания платежа
+  const requestData = {
+    action: "processPayment",
+    ls: paymentData.ls,
+    service_id: paymentData.service_id,
+    service: paymentData.service,
+    amount: paymentData.amount,
+    payment_type: paymentData.payment_type.toLowerCase() === "cash" ? "cash" : "terminal",
+    date: paymentData.date,
+    user_id: paymentData.user_id
+  };
+
+  console.log("📤 Отправляем данные на сервер для создания платежа:", requestData);
+
+  // Отправляем запрос на создание платежа
+  fetch(BASE_API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(requestData)
+  })
+    .then(function (response) {
+      return response.json();
+    })
+    .then(function (data) {
+      console.log("📥 Ответ от сервера:", data);
+
+      if (data.success) {
+        // Платеж успешно создан
+        showPaymentSuccess("Платеж успешно создан!");
+
+        // Очищаем поля
+        if (currentWaitingPayment && currentWaitingPayment.details) {
+          const amountInput = currentWaitingPayment.details.querySelector('.amount-input');
+          const serviceSelect = currentWaitingPayment.details.querySelector('.service-select');
+          if (amountInput) amountInput.value = "";
+          if (serviceSelect) serviceSelect.selectedIndex = 0;
+        }
+      } else {
+        // Ошибка создания платежа
+        showPaymentError(data.message || "Ошибка создания платежа");
+      }
+    })
+    .catch(function (error) {
+      console.error("❌ Ошибка создания платежа:", error);
+      showPaymentError("Ошибка создания платежа: " + error.message);
+    });
+}
+
+// Функция показа успеха
+function showPaymentSuccess(message) {
+  ModalSystem.alert(message);
+}
+
+// Функция показа ошибки
+function showPaymentError(message) {
+  ModalSystem.alert("Ошибка: " + message);
+}
+
+// Функция для отображения ответа Flutter в модальном окне
+function showFlutterResponseModal(response) {
+  // Создаем модальное окно
+  const modal = document.createElement("div");
+  modal.id = "flutterResponseModal";
+  modal.className = "modal-overlay";
+
+  const content = document.createElement("div");
+  content.className = "modal-content flutter-response-content";
+  content.style.cssText = `
+    max-width: 90vw;
+    max-height: 90vh;
+    width: 800px;
+    display: flex;
+    flex-direction: column;
+  `;
+
+  const title = document.createElement("h2");
+  title.textContent = "Ответ от Flutter (DEBUG)";
+  title.className = "modal-message";
+  title.style.cssText = "margin: 0 0 15px 0; flex-shrink: 0;";
+
+  const responseDiv = document.createElement("div");
+  responseDiv.className = "flutter-response-data";
+  responseDiv.style.cssText = `
+    flex: 1;
+    overflow: auto;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    background: #f9f9f9;
+  `;
+
+  // Форматируем ответ для отображения
+  const formattedResponse = JSON.stringify(response, null, 2);
+  const preElement = document.createElement("pre");
+  preElement.style.cssText = `
+    margin: 0;
+    padding: 15px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    background: transparent;
+    user-select: text;
+    cursor: text;
+  `;
+  preElement.textContent = formattedResponse;
+  responseDiv.appendChild(preElement);
+
+  const buttonContainer = document.createElement("div");
+  buttonContainer.className = "modal-buttons";
+  buttonContainer.style.cssText = "flex-shrink: 0; margin-top: 15px; display: flex; gap: 10px;";
+
+  const copyBtn = document.createElement("button");
+  copyBtn.textContent = "Копировать";
+  copyBtn.className = "modal-button";
+  copyBtn.style.cssText = "background: #007bff; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;";
+  copyBtn.onclick = () => {
+    navigator.clipboard.writeText(formattedResponse).then(() => {
+      copyBtn.textContent = "Скопировано!";
+      copyBtn.style.background = "#28a745";
+      setTimeout(() => {
+        copyBtn.textContent = "Копировать";
+        copyBtn.style.background = "#007bff";
+      }, 2000);
+    }).catch(() => {
+      // Fallback для старых браузеров
+      const textArea = document.createElement("textarea");
+      textArea.value = formattedResponse;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textArea);
+      copyBtn.textContent = "Скопировано!";
+      copyBtn.style.background = "#28a745";
+      setTimeout(() => {
+        copyBtn.textContent = "Копировать";
+        copyBtn.style.background = "#007bff";
+      }, 2000);
+    });
+  };
+
+  const okBtn = document.createElement("button");
+  okBtn.textContent = "OK";
+  okBtn.className = "modal-button primary";
+  okBtn.style.cssText = "background: #6c757d; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;";
+  okBtn.onclick = () => {
+    modal.remove();
+  };
+
+  buttonContainer.appendChild(copyBtn);
+  buttonContainer.appendChild(okBtn);
+  content.appendChild(title);
+  content.appendChild(responseDiv);
+  content.appendChild(buttonContainer);
+  modal.appendChild(content);
+  document.body.appendChild(modal);
+
+  // Фокус на кнопке копирования
+  copyBtn.focus();
+}
 
 // Глобальная переменная для хранения данных ожидающего платежа
 let currentWaitingPayment = null;
@@ -1073,6 +1501,13 @@ window.renderCurrentPageResults = function renderCurrentPageResults() {
           // Создаем данные платежа
           const finalUserId = controllerNameDisplay ? controllerNameDisplay.getAttribute('data-user-id') || '1' : '1';
 
+          // Формируем дату в локальном часовом поясе (совместимость Android 7)
+          const today = new Date();
+          const year = today.getFullYear();
+          const month = today.getMonth() + 1;
+          const day = today.getDate();
+          const currentDate = year + '-' + (month < 10 ? '0' + month : month) + '-' + (day < 10 ? '0' + day : day);
+
           const paymentData = {
             action: "processPayment",
             ls: subscriber.account_number,
@@ -1080,7 +1515,7 @@ window.renderCurrentPageResults = function renderCurrentPageResults() {
             service: serviceName,
             amount: enteredAmount,
             payment_type: flutterPaymentType,
-            date: new Date().toISOString().split("T")[0],
+            date: currentDate,
             controllerName: controllerName,
             user_id: finalUserId
           };
@@ -1175,4 +1610,12 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   checkPhoneAuth();
+
+  // Обработчик кнопки настроек терминала (в экране логина)
+  const terminalSettingsButtonLogin = document.getElementById("terminalSettingsButtonLogin");
+  if (terminalSettingsButtonLogin) {
+    terminalSettingsButtonLogin.addEventListener("click", function () {
+      openTerminalSettings();
+    });
+  }
 });

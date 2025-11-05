@@ -4,6 +4,9 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET');
 header('Access-Control-Allow-Headers: Content-Type');
 
+// Устанавливаем часовой пояс GMT+6
+date_default_timezone_set('Asia/Bishkek');
+
 try {
     // Проверяем, существует ли файл с токеном
     if (!file_exists('tokens.json')) {

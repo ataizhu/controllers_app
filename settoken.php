@@ -1,4 +1,7 @@
 <?php
+// Устанавливаем часовой пояс GMT+6 в самом начале
+date_default_timezone_set('Asia/Bishkek');
+
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST');

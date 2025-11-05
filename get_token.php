@@ -1,6 +1,59 @@
 <?php
+// Устанавливаем часовой пояс GMT+6
+date_default_timezone_set('Asia/Bishkek');
+
+header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type');
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit;
+}
+
 // Загружаем конфигурацию
 $config = require 'config.php';
+
+// Получаем данные из запроса
+$input = file_get_contents('php://input');
+$jsonData = json_decode($input, true);
+$serialNumber = isset($jsonData['serial_number']) ? trim($jsonData['serial_number']) : null;
+
+// Получаем operator_login из БД по серийному номеру
+$operatorLogin = null;
+if ($serialNumber) {
+    try {
+        chdir(__DIR__ . '/../');
+
+        if (file_exists('config.inc.php')) {
+            require_once 'config.inc.php';
+            require_once 'include/utils/utils.php';
+
+            global $adb;
+            if (!isset($adb) || !$adb) {
+                $adb = PearDatabase::getInstance();
+            }
+
+            if ($adb) {
+                $query = "SELECT operator_login FROM terminal_settings WHERE serial_number = ? LIMIT 1";
+                $result = $adb->pquery($query, array($serialNumber));
+
+                if ($adb->num_rows($result) > 0) {
+                    $row = $adb->fetchByAssoc($result);
+                    $operatorLogin = $row['operator_login'];
+                }
+            }
+        }
+    } catch (Exception $e) {
+        error_log("Error getting operator_login: " . $e->getMessage());
+    }
+}
+
+// Если не найден в БД, используем из конфига
+if (!$operatorLogin) {
+    $operatorLogin = $config['megapay']['operator_login'];
+}
 
 // Конфигурация из файла
 $megaPayUrl = $config['megapay']['url'];
@@ -8,7 +61,7 @@ $callbackUrl = $config['megapay']['callback_url'];
 
 $requestData = [
     '@MsgNum' => uniqid('req_', true), // Генерируем уникальный ID
-    'OpLogin' => $config['megapay']['operator_login'],
+    'OpLogin' => $operatorLogin,
     'SysLogin' => $config['megapay']['system_admin_login'],
     'SysPwd' => $config['megapay']['system_admin_password_hash'],
     'Lang' => $config['megapay']['language'],
@@ -54,38 +107,13 @@ function sendGetTokenRequest($url, $data) {
 $result = sendGetTokenRequest($megaPayUrl, $requestData);
 
 // Выводим результат
-echo "<h2>Результат запроса GetToken:</h2>";
-echo "<p><strong>HTTP Code:</strong> " . $result['httpCode'] . "</p>";
-
-if ($result['error']) {
-    echo "<p><strong>Ошибка cURL:</strong> " . $result['error'] . "</p>";
-}
-
-if ($result['response']) {
-    $responseData = json_decode($result['response'], true);
-    echo "<p><strong>Ответ сервера:</strong></p>";
-    echo "<pre>" . json_encode($responseData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . "</pre>";
-
-    if ($responseData && isset($responseData['Response']['Code']) && $responseData['Response']['Code'] === '00') {
-        echo "<p style='color: green;'><strong>✅ Токен успешно получен!</strong></p>";
-        echo "<p><strong>Токен:</strong> " . ($responseData['Token'] ?? 'Не указан') . "</p>";
-        echo "<p><strong>Время жизни:</strong> " . ($responseData['TokenTimeout'] ?? 'Не указано') . " секунд</p>";
-    } else {
-        echo "<p style='color: red;'><strong>❌ Ошибка получения токена</strong></p>";
-        echo "<p><strong>Код ошибки:</strong> " . ($responseData['Response']['Code'] ?? 'Неизвестно') . "</p>";
-        echo "<p><strong>Описание:</strong> " . ($responseData['Response']['Description'] ?? 'Неизвестно') . "</p>";
-
-        // Логируем только ошибочные запросы
-        logRequest(['type' => 'ERROR - GetToken Failed', 'request' => $requestData, 'response' => $responseData]);
-    }
-} else {
-    echo "<p style='color: red;'><strong>❌ Нет ответа от сервера</strong></p>";
-
-    // Логируем только ошибочные запросы
-    logRequest(['type' => 'ERROR - No Response', 'request' => $requestData, 'result' => $result]);
-}
-
-echo "<hr>";
-echo "<p><strong>Callback URL для настройки в MegaPay:</strong> " . $callbackUrl . "</p>";
-echo "<p><strong>Лог файл:</strong> token_requests.log</p>";
+header('Content-Type: application/json');
+echo json_encode([
+    'success' => $result['httpCode'] === 200 && !$result['error'],
+    'httpCode' => $result['httpCode'],
+    'error' => $result['error'],
+    'response' => $result['response'] ? json_decode($result['response'], true) : null,
+    'operator_login_used' => $operatorLogin
+], JSON_UNESCAPED_UNICODE);
+exit;
 ?>
