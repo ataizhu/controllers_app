@@ -13,6 +13,29 @@ let pendingPaymentAfterSerialNumber = null; // Данные платежа ож�
 let vat_value = 12.00; // НДС (Налог на добавленную стоимость)
 let st_value = 2.00; // НСП (Налог с продаж)
 
+// Функция для записи логов на сервер
+function writePaymentLog(message) {
+  fetch(BASE_API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'logPayment',
+      message: message
+    })
+  })
+    .then(function (response) {
+      return response.json();
+    })
+    .then(function (data) {
+      if (!data.success) {
+        console.error('Ошибка записи лога:', data.message);
+      }
+    })
+    .catch(function (error) {
+      console.error('Ошибка отправки лога:', error);
+    });
+}
+
 // Обработчики для Flutter - объявляем сразу, чтобы были доступны до загрузки DOM
 // Обработчик получения серийного номера от Flutter (вызывается Flutter'ом после нашего запроса)
 window.getSerialNumber = function (serialNumber) {
@@ -846,6 +869,7 @@ function sendPaymentToFlutter(paymentData, button, details, paymentType) {
   showPaymentWaitingModal(paymentData, button, details);
 
   // Отправляем данные в Flutter
+  // ВАЖНО: Flutter должен вернуть все данные платежа вместе с ответом
   window.flutter_inappwebview.callHandler("onPayment", paymentData);
 }
 
@@ -1215,8 +1239,92 @@ function requestNewToken() {
   });
 }
 
+// Обработка фискальных данных (используется только внутри createPaymentAfterFlutterConfirmation)
+function addFiscalToPayment(fiscalData) {
+  console.log('🧾 Получены фискальные данные для платежа:', fiscalData);
+  // Логируем как есть - если строка, то строка, если объект - сериализуем
+  const logData = typeof fiscalData === 'string' ? fiscalData : JSON.stringify(fiscalData, null, 2);
+  writePaymentLog('🔄 Получены фискальные данные для платежа: ' + logData);
+
+  // Парсим данные если они строка
+  let parsedFiscalData = fiscalData;
+  if (typeof fiscalData === 'string') {
+    try {
+      parsedFiscalData = JSON.parse(fiscalData);
+    } catch (e) {
+      console.error('❌ Ошибка парсинга JSON фискальных данных:', e);
+      writePaymentLog('❌ Ошибка парсинга JSON фискальных данных | Error: ' + e.message + ' | Raw data: ' + fiscalData);
+      return;
+    }
+  }
+
+  // Логируем тип данных для отладки
+  writePaymentLog('🧾 Тип parsedFiscalData:', typeof parsedFiscalData);
+  writePaymentLog('🧾 parsedFiscalData:', parsedFiscalData);
+  writePaymentLog('🧾 parsedFiscalData.rrn:', parsedFiscalData ? parsedFiscalData.rrn : 'null');
+  writePaymentLog('🧾 parsedFiscalData.rnn:', parsedFiscalData ? parsedFiscalData.rnn : 'null');
+
+  // Извлекаем RNN и QR из данных
+  // Проверяем оба варианта: rrn (из фискальных данных) и rnn (из терминала)
+  const rnn = (parsedFiscalData && parsedFiscalData.rrn)
+    ? parsedFiscalData.rrn
+    : (parsedFiscalData && parsedFiscalData.rnn)
+      ? parsedFiscalData.rnn
+      : null;
+  const qrRsk = parsedFiscalData && parsedFiscalData.qr ? parsedFiscalData.qr : null;
+
+  // Логируем извлеченные данные для отладки
+  writePaymentLog('🧾 Извлеченные данные:', { rnn, qrRsk });
+
+  // Если нет RNN или QR - не можем обновить платеж
+  if (!rnn) {
+    console.warn('⚠️ RNN не найден в фискальных данных, обновление платежа невозможно');
+    writePaymentLog('⚠️ RNN не найден в фискальных данных | Data: ' + JSON.stringify(parsedFiscalData));
+    return;
+  }
+
+  if (!qrRsk) {
+    console.warn('⚠️ QR RSK не найден в фискальных данных, обновление платежа невозможно');
+    writePaymentLog('⚠️ QR RSK не найден в фискальных данных | RNN: ' + rnn);
+    return;
+  }
+
+  // Обновляем платеж по RNN
+
+  fetch(BASE_API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'updatePaymentByRnn',
+      rnn: rnn,
+      qr_rsk: qrRsk
+    })
+  })
+    .then(function (response) {
+      return response.json();
+    })
+    .then(function (data) {
+      if (data.success) {
+        console.log('✅ Платеж успешно обновлен фискальными данными | PaymentID: ' + (data.payment_id || 'не указан') + ' | RNN: ' + rnn);
+        writePaymentLog('✅ Платеж успешно обновлен фискальными данными | PaymentID: ' + (data.payment_id || 'не указан') + ' | RNN: ' + rnn + ' | QR RSK: ' + qrRsk);
+      } else {
+        console.error('❌ Ошибка обновления платежа:', data.message);
+        writePaymentLog('❌ Ошибка обновления платежа | Message: ' + (data.message || 'не указано') + ' | RNN: ' + rnn);
+      }
+    })
+    .catch(function (error) {
+      console.error('❌ Ошибка сети при обновлении платежа:', error);
+      writePaymentLog('❌ Ошибка сети при обновлении платежа | Error: ' + error.message + ' | RNN: ' + rnn);
+    });
+}
+
 // Обработчик ответа от Flutter после оплаты
 window.createPaymentAfterFlutterConfirmation = function (response) {
+  console.log('🔄 Получен ответ от Flutter после оплаты: ', response);
+  // Логируем как есть - если строка, то строка, если объект - сериализуем
+  const logData = typeof response === 'string' ? response : JSON.stringify(response, null, 2);
+  writePaymentLog('🔄 Получен ответ от Flutter после оплаты: ' + logData);
+
   // Парсим ответ если он строка
   let responseData = response;
   if (typeof response === 'string') {
@@ -1225,23 +1333,13 @@ window.createPaymentAfterFlutterConfirmation = function (response) {
     } catch (e) {
       console.error('❌ Ошибка парсинга JSON:', e);
       showPaymentError("Ошибка формата ответа от платежной системы");
-      // Разблокируем кнопку
-      if (currentWaitingPayment && currentWaitingPayment.button) {
-        currentWaitingPayment.button.disabled = false;
-        currentWaitingPayment.button.textContent = getTranslationSafe("accept_payment_button_terminal");
+      // Закрываем модальное окно ожидания
+      const waitingModal = document.getElementById("paymentWaitingModal");
+      if (waitingModal) {
+        waitingModal.remove();
       }
-      currentWaitingPayment = null;
       return;
     }
-  }
-
-  // Логируем RNN если он есть
-  if (responseData && responseData.transaction &&
-    responseData.transaction.instrumentSpecificData &&
-    responseData.transaction.instrumentSpecificData.rrn) {
-    console.log('📋 RNN от терминала: ' + responseData.transaction.instrumentSpecificData.rrn);
-  } else if (responseData && responseData.result && responseData.result.RNN) {
-    console.log('📋 RNN от терминала: ' + responseData.result.RNN);
   }
 
   // Закрываем модальное окно ожидания
@@ -1250,77 +1348,79 @@ window.createPaymentAfterFlutterConfirmation = function (response) {
     waitingModal.remove();
   }
 
-  // Проверяем успешность оплаты
-
-  // Проверяем формат ошибки с полями error, errorCode, message
-  if (responseData && responseData.error && responseData.errorCode !== undefined) {
+  const hasErrorShape = responseData && typeof responseData === 'object' && responseData.error && responseData.errorCode !== undefined;
+  if (hasErrorShape) {
     console.error("❌ Ошибка оплаты от Flutter:", responseData);
     const errorMessage = responseData.message || responseData.error || "Ошибка при выполнении оплаты";
     showPaymentError(errorMessage);
-    // Разблокируем кнопку
-    if (currentWaitingPayment && currentWaitingPayment.button) {
-      currentWaitingPayment.button.disabled = false;
-      currentWaitingPayment.button.textContent = getTranslationSafe("accept_payment_button_terminal");
-    }
-    // Очищаем данные ожидающего платежа
-    currentWaitingPayment = null;
-    return; // Не создаем платеж при ошибке
-  }
-
-  if (responseData && responseData.result && responseData.result.code === 0) {
-    // Оплата успешна - создаем платеж в системе
-    createPaymentInSystem(responseData);
-  } else {
-    // Ошибка оплаты
-    console.error("❌ Ошибка оплаты:", responseData);
-    const errorMessage = responseData && responseData.result ? responseData.result.description : "Ошибка оплаты";
-    showPaymentError(errorMessage);
-  }
-
-  // Разблокируем кнопку (если еще не разблокирована)
-  if (currentWaitingPayment && currentWaitingPayment.button) {
-    currentWaitingPayment.button.disabled = false;
-    currentWaitingPayment.button.textContent = getTranslationSafe("accept_payment_button_terminal");
-  }
-
-  // Очищаем данные ожидающего платежа (если еще не очищены)
-  if (currentWaitingPayment) {
-    currentWaitingPayment = null;
-  }
-};
-
-// Функция создания платежа в системе
-function createPaymentInSystem(megapayResponse) {
-  if (!currentWaitingPayment || !currentWaitingPayment.paymentData) {
-    console.error("❌ Нет данных о платеже");
-    showPaymentError("Ошибка: данные платежа не найдены");
     return;
   }
 
-  const paymentData = currentWaitingPayment.paymentData;
+  const payload = responseData && typeof responseData === 'object'
+    ? (responseData.paymentData ? responseData.paymentData : responseData)
+    : null;
 
-  // Получаем RNN из ответа MegaPay
-  // RNN может быть в разных местах в зависимости от формата ответа
-  let rnn = null;
+  const paymentTypeRaw = payload && payload.payment_type ? String(payload.payment_type).trim() : null;
+  const paymentType = paymentTypeRaw ? paymentTypeRaw.toUpperCase() : null;
 
-  // Проверяем новый формат: transaction.instrumentSpecificData.rrn
-  if (megapayResponse &&
-    megapayResponse.transaction &&
-    megapayResponse.transaction.instrumentSpecificData &&
-    megapayResponse.transaction.instrumentSpecificData.rrn) {
-    rnn = megapayResponse.transaction.instrumentSpecificData.rrn;
+  if (paymentType === 'CASH') {
+    console.log('💵 Получен CASH-платеж -> создаем запись с QR (если есть)');
+    const payloadForCreation = responseData.paymentData ? { ...responseData, paymentData: { ...responseData.paymentData } } : { ...responseData };
+    const targetPayload = payloadForCreation.paymentData ? payloadForCreation.paymentData : payloadForCreation;
+    targetPayload.rnn = null;
+    if (targetPayload.qr) {
+      targetPayload.qr_rsk = targetPayload.qr;
+    }
+    createPaymentInSystem(payloadForCreation);
+    return;
   }
-  // Проверяем старый формат: result.RNN (для обратной совместимости)
-  else if (megapayResponse &&
-    megapayResponse.result &&
-    megapayResponse.result.RNN) {
-    rnn = megapayResponse.result.RNN;
+
+  if (paymentType === 'CARD') {
+    console.log('💳 Получен CARD-платеж -> создаем запись');
+    const payloadForCreation = responseData.paymentData ? { ...responseData, paymentData: { ...responseData.paymentData } } : { ...responseData };
+    const targetPayload = payloadForCreation.paymentData ? payloadForCreation.paymentData : payloadForCreation;
+    if (responseData.transaction && responseData.transaction.instrumentSpecificData && responseData.transaction.instrumentSpecificData.rrn) {
+      targetPayload.rnn = responseData.transaction.instrumentSpecificData.rrn;
+    } else if (responseData.result && responseData.result.RNN) {
+      targetPayload.rnn = responseData.result.RNN;
+    } else if (responseData.rrn || responseData.rnn) {
+      targetPayload.rnn = responseData.rrn || responseData.rnn;
+    }
+
+    createPaymentInSystem(payloadForCreation);
+    return;
   }
 
-  if (rnn) {
-    console.log("📋 RNN от терминала:", rnn);
-  } else {
-    console.warn("⚠️ RNN не найден в ответе от терминала");
+  if (payload && typeof payload.cashless !== 'undefined') {
+    const cashless = typeof payload.cashless === 'string'
+      ? payload.cashless.toLowerCase() === 'true'
+      : Boolean(payload.cashless);
+
+    if (cashless) {
+      console.log('🧾 Фискальный пакет (cashless=true) -> обновляем платеж по RNN');
+      addFiscalToPayment(payload);
+      return;
+    }
+  }
+
+  console.warn('⚠️ Неизвестный формат ответа от Flutter:', responseData);
+  writePaymentLog('⚠️ Неизвестный формат ответа от Flutter | Data: ' + JSON.stringify(responseData));
+  showPaymentError("Неизвестный формат ответа от Flutter");
+};
+
+// Функция создания платежа в системе
+// ВАЖНО: responseData должен содержать все данные платежа от Flutter
+function createPaymentInSystem(responseData) {
+  // Получаем данные платежа из ответа Flutter
+  // Flutter должен возвращать все данные, которые были отправлены в onPayment
+  const paymentData = responseData.paymentData || responseData;
+
+  // Проверяем наличие обязательных полей
+  if (!paymentData.ls || !paymentData.service_id || !paymentData.amount) {
+    console.error("❌ Неполные данные платежа в ответе от Flutter:", paymentData);
+    writePaymentLog('❌ Неполные данные платежа в ответе от Flutter | Data: ' + JSON.stringify(paymentData));
+    showPaymentError("Ошибка: неполные данные платежа от Flutter");
+    return;
   }
 
   // Формируем данные для создания платежа
@@ -1330,11 +1430,20 @@ function createPaymentInSystem(megapayResponse) {
     service_id: paymentData.service_id,
     service: paymentData.service,
     amount: paymentData.amount,
-    payment_type: paymentData.payment_type.toLowerCase() === "cash" ? "cash" : "terminal",
-    date: paymentData.date,
-    user_id: paymentData.user_id,
-    rnn: rnn // Добавляем RNN от MegaPay
+    payment_type: paymentData.payment_type ? paymentData.payment_type.toLowerCase() === "cash" ? "cash" : "terminal" : "terminal",
+    date: paymentData.date || new Date().toISOString().split('T')[0],
+    user_id: paymentData.user_id || '1',
+    rnn: paymentData.rnn || null
   };
+
+  if (paymentData.qr_rsk) {
+    requestData.qr_rsk = paymentData.qr_rsk;
+  } else if (paymentData.qr) {
+    requestData.qr_rsk = paymentData.qr;
+  }
+
+  console.log("📤 Отправляем данные на сервер, RNN:", requestData.rnn);
+  console.log("📤 Полные данные запроса:", JSON.stringify(requestData));
 
   // Отправляем запрос на создание платежа
   fetch(BASE_API_URL, {
@@ -1348,22 +1457,17 @@ function createPaymentInSystem(megapayResponse) {
     .then(function (data) {
       if (data.success) {
         // Платеж успешно создан
+        writePaymentLog('✅ Платеж успешно создан на сервере | PaymentID: ' + (data.payment_id || 'не указан') + ' | LS: ' + paymentData.ls + ' | Amount: ' + paymentData.amount);
         showPaymentSuccess("Платеж успешно создан!");
-
-        // Очищаем поля
-        if (currentWaitingPayment && currentWaitingPayment.details) {
-          const amountInput = currentWaitingPayment.details.querySelector('.amount-input');
-          const serviceSelect = currentWaitingPayment.details.querySelector('.service-select');
-          if (amountInput) amountInput.value = "";
-          if (serviceSelect) serviceSelect.selectedIndex = 0;
-        }
       } else {
         // Ошибка создания платежа
+        writePaymentLog('❌ Ошибка создания платежа на сервере | Message: ' + (data.message || 'не указано') + ' | LS: ' + paymentData.ls);
         showPaymentError(data.message || "Ошибка создания платежа");
       }
     })
     .catch(function (error) {
       console.error("❌ Ошибка создания платежа:", error);
+      writePaymentLog('❌ Ошибка сети при создании платежа | Error: ' + error.message + ' | LS: ' + (paymentData.ls || 'не указан'));
       showPaymentError("Ошибка создания платежа: " + error.message);
     });
 }
@@ -1481,18 +1585,8 @@ function showFlutterResponseModal(response) {
   copyBtn.focus();
 }
 
-// Глобальная переменная для хранения данных ожидающего платежа
-let currentWaitingPayment = null;
-
 // Функция показа модального окна ожидания
 function showPaymentWaitingModal(paymentData, button, details) {
-  // Сохраняем данные для последующего использования
-  currentWaitingPayment = {
-    paymentData: paymentData,
-    button: button,
-    details: details
-  };
-
   // Создаем модальное окно
   const modal = document.createElement("div");
   modal.id = "paymentWaitingModal";
@@ -1526,9 +1620,14 @@ function showPaymentWaitingModal(paymentData, button, details) {
   cancelBtn.textContent = getTranslationSafe("payment_waiting_cancel");
   cancelBtn.className = "button button-danger payment-waiting-cancel";
   cancelBtn.onclick = () => {
-    // Отменяем платеж
-    cancelWaitingPayment();
+    // Отменяем платеж - просто закрываем модальное окно
     modal.remove();
+    // Разблокируем кнопку
+    if (button) {
+      button.disabled = false;
+      button.textContent = getTranslationSafe("accept_payment_button_terminal");
+    }
+    showAlertWithKeyboardHide(getTranslationSafe("payment_cancelled"));
   };
 
   content.appendChild(title);
@@ -1540,63 +1639,9 @@ function showPaymentWaitingModal(paymentData, button, details) {
   document.body.appendChild(modal);
 
   // Блокируем кнопку
-  button.disabled = true;
-  button.textContent = getTranslationSafe("payment_waiting_button");
-}
-
-// Функция отмены ожидающего платежа
-function cancelWaitingPayment() {
-  if (currentWaitingPayment) {
-    // Разблокируем кнопку
-    currentWaitingPayment.button.disabled = false;
-    currentWaitingPayment.button.textContent = getTranslationSafe("accept_payment_button_terminal");
-
-    // Очищаем данные
-    currentWaitingPayment = null;
-
-    showAlertWithKeyboardHide(getTranslationSafe("payment_cancelled"));
-  }
-}
-
-// Функция успешного завершения платежа
-function completeWaitingPayment() {
-  if (currentWaitingPayment) {
-    // Очищаем поля
-    currentWaitingPayment.details.querySelector(`.amount-input`).value = "";
-    currentWaitingPayment.details.querySelector(`.service-select`).selectedIndex = 0;
-
-    // Разблокируем кнопку
-    currentWaitingPayment.button.disabled = false;
-    currentWaitingPayment.button.textContent = getTranslationSafe("accept_payment_button_terminal");
-
-    // Удаляем модальное окно
-    const modal = document.getElementById("paymentWaitingModal");
-    if (modal) {
-      modal.remove();
-    }
-
-    // Очищаем данные
-    currentWaitingPayment = null;
-  }
-}
-
-// Функция ошибки платежа
-function errorWaitingPayment(errorMessage) {
-  if (currentWaitingPayment) {
-    // Разблокируем кнопку
-    currentWaitingPayment.button.disabled = false;
-    currentWaitingPayment.button.textContent = getTranslationSafe("accept_payment_button_terminal");
-
-    // Удаляем модальное окно
-    const modal = document.getElementById("paymentWaitingModal");
-    if (modal) {
-      modal.remove();
-    }
-
-    // Очищаем данные
-    currentWaitingPayment = null;
-
-    showAlertWithKeyboardHide(getTranslationSafe("payment_terminal_error") + errorMessage);
+  if (button) {
+    button.disabled = true;
+    button.textContent = getTranslationSafe("payment_waiting_button");
   }
 }
 

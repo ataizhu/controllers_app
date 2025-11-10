@@ -70,6 +70,21 @@ try {
         throw new Exception('Не удалось подключиться к базе данных');
     }
 
+    // Функция для записи в лог файл payments.log
+    function writePaymentLog($message) {
+        $logFile = __DIR__ . '/payments.log';
+        $timestamp = date('Y-m-d H:i:s');
+        $logEntry = "[{$timestamp}] {$message}" . PHP_EOL;
+
+        // Если файл не существует, создаем его с правами на запись
+        if (!file_exists($logFile)) {
+            file_put_contents($logFile, '', FILE_APPEND | LOCK_EX);
+            chmod($logFile, 0666); // Права на чтение и запись для всех
+        }
+
+        file_put_contents($logFile, $logEntry, FILE_APPEND | LOCK_EX);
+    }
+
     $testResult = $adb->query("SELECT 1 as test");
     if (!$testResult) {
         throw new Exception('База данных недоступна');
@@ -375,9 +390,16 @@ try {
             $date = isset($_POST['date']) ? trim($_POST['date']) : date('Y-m-d');
             $userId = isset($_POST['user_id']) ? intval($_POST['user_id']) : 1;
             $rnn = isset($_POST['rnn']) ? trim($_POST['rnn']) : null; // RNN от MegaPay
+            $qrRsk = null;
+            if (isset($_POST['qr_rsk'])) {
+                $qrRsk = trim($_POST['qr_rsk']);
+            } elseif (isset($_POST['qr'])) {
+                $qrRsk = trim($_POST['qr']);
+            }
 
             if (empty($ls) || empty($serviceId) || $amount <= 0 || empty($paymentType)) {
                 $response = ['success' => false, 'message' => 'Неверные или отсутствующие данные для платежа.'];
+                writePaymentLog("❌ Ошибка создания платежа: Неверные или отсутствующие данные | LS: " . ($ls ?: 'empty') . " | ServiceID: " . ($serviceId ?: 'empty') . " | Amount: {$amount} | Type: " . ($paymentType ?: 'empty'));
                 break;
             }
 
@@ -393,6 +415,7 @@ try {
                         "success" => false,
                         "message" => "Лицевой счёт не найден"
                     ];
+                    writePaymentLog("❌ Ошибка создания платежа: Лицевой счёт не найден | LS: {$ls}");
                     break;
                 }
 
@@ -423,9 +446,19 @@ try {
                         $payment->set('cf_txnid', $rnn);
                     }
 
+                    // Записываем QR ссылку, если она есть (обычно для cash или фискальных данных)
+                    if (!empty($qrRsk)) {
+                        $payment->set('cf_qr_rsk', $qrRsk);
+                    }
+
                     $payment->set('mode', 'create');
                     $payment->save();
                     $paymentId = $payment->getId();
+
+                    // Логируем успешное создание платежа
+                    writePaymentLog("✅ Платеж успешно создан | PaymentID: {$paymentId} | LS: {$ls} | Amount: {$amount} | Type: {$paymentType}"
+                        . (!empty($rnn) ? " | RNN: {$rnn}" : "")
+                        . (!empty($qrRsk) ? " | QR RSK: добавлен" : ""));
 
                     $response = [
                         "success" => true,
@@ -439,12 +472,97 @@ try {
                         "success" => false,
                         "message" => "Неизвестный тип платежа: " . $paymentType
                     ];
+                    writePaymentLog("❌ Ошибка создания платежа: Неизвестный тип платежа | PaymentType: {$paymentType} | LS: {$ls}");
                 }
 
             } catch (Exception $e) {
+                $errorMessage = $e->getMessage();
+                writePaymentLog("❌ Ошибка создания платежа: {$errorMessage} | LS: {$ls} | Amount: {$amount} | Type: {$paymentType}");
                 $response = [
                     "success" => false,
-                    "message" => "Ошибка при обработке платежа: " . $e->getMessage()
+                    "message" => "Ошибка при обработке платежа: " . $errorMessage
+                ];
+            }
+            break;
+
+        case 'logPayment':
+            // Действие для записи логов из JavaScript
+            $message = isset($_POST['message']) ? trim($_POST['message']) : null;
+
+            if (empty($message)) {
+                $response = ['success' => false, 'message' => 'Отсутствует параметр message.'];
+                break;
+            }
+
+            writePaymentLog($message);
+            $response = ['success' => true, 'message' => 'Лог записан'];
+            break;
+
+        case 'updatePaymentByRnn':
+            // Обновление платежа по RNN с добавлением QR ссылки
+            $rnn = isset($_POST['rnn']) ? trim($_POST['rnn']) : null;
+            $qrRsk = isset($_POST['qr_rsk']) ? trim($_POST['qr_rsk']) : null;
+
+            if (empty($rnn)) {
+                $response = ['success' => false, 'message' => 'Отсутствует параметр rnn.'];
+                writePaymentLog("❌ Ошибка обновления платежа: Отсутствует RNN");
+                break;
+            }
+
+            if (empty($qrRsk)) {
+                $response = ['success' => false, 'message' => 'Отсутствует параметр qr_rsk.'];
+                writePaymentLog("❌ Ошибка обновления платежа: Отсутствует QR RSK | RNN: {$rnn}");
+                break;
+            }
+
+            try {
+                // Ищем платеж по RNN в поле cf_txnid
+                $query = "SELECT paymentsid FROM vtiger_payments 
+                         INNER JOIN vtiger_crmentity ON vtiger_crmentity.crmid = vtiger_payments.paymentsid
+                         WHERE vtiger_payments.cf_txnid = ? AND vtiger_crmentity.deleted = 0 
+                         LIMIT 1";
+                $result = $adb->pquery($query, array($rnn));
+
+                if ($adb->num_rows($result) === 0) {
+                    $response = [
+                        'success' => false,
+                        'message' => 'Платеж с указанным RNN не найден'
+                    ];
+                    writePaymentLog("❌ Ошибка обновления платежа: Платеж не найден | RNN: {$rnn}");
+                    break;
+                }
+
+                $row = $adb->fetch_array($result);
+                $paymentId = $row['paymentsid'];
+
+                // Обновляем платеж
+                $payment = Vtiger_Record_Model::getInstanceById($paymentId, "Payments");
+                if ($payment) {
+                    $payment->set('cf_qr_rsk', $qrRsk);
+                    $payment->set('mode', 'edit');
+                    $payment->save();
+
+                    writePaymentLog("✅ Платеж обновлен фискальными данными | PaymentID: {$paymentId} | RNN: {$rnn} | QR RSK: {$qrRsk}");
+
+                    $response = [
+                        'success' => true,
+                        'message' => 'Платеж успешно обновлен',
+                        'payment_id' => $paymentId
+                    ];
+                } else {
+                    $response = [
+                        'success' => false,
+                        'message' => 'Не удалось загрузить платеж для обновления'
+                    ];
+                    writePaymentLog("❌ Ошибка обновления платежа: Не удалось загрузить | PaymentID: {$paymentId} | RNN: {$rnn}");
+                }
+
+            } catch (Exception $e) {
+                $errorMessage = $e->getMessage();
+                writePaymentLog("❌ Ошибка обновления платежа: {$errorMessage} | RNN: {$rnn}");
+                $response = [
+                    'success' => false,
+                    'message' => 'Ошибка при обновлении платежа: ' . $errorMessage
                 ];
             }
             break;
