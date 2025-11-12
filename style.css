@@ -604,6 +604,16 @@ select[data-selected="true"] {
     font-weight: 600;
 }
 
+.detail-value.debt-balance {
+    color: var(--error-color, #e74c3c);
+    font-weight: 600;
+}
+
+.detail-value.overpayment-balance {
+    color: var(--success-color, #27ae60);
+    font-weight: 600;
+}
+
 .subscriber-card.active .subscriber-details {
     display: block;
 }

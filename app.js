@@ -88,10 +88,7 @@ window.getSerialNumber = function (serialNumber) {
           if (!login) {
             // operator_login не найден - показываем сообщение и прерываем
             console.error('❌ operator_login не найден в БД для терминала:', serialNumber);
-            if (paymentData.button) {
-              paymentData.button.disabled = false;
-              paymentData.button.textContent = getTranslationSafe("accept_payment_button_terminal");
-            }
+            releasePaymentButton(paymentData.button);
             showAlertWithKeyboardHide('Для данного терминала не настроен operator_login.');
             return;
           }
@@ -118,20 +115,14 @@ window.getSerialNumber = function (serialNumber) {
             })
             .catch(function (error) {
               console.error("❌ Ошибка получения токена:", error);
-              if (paymentData.button) {
-                paymentData.button.disabled = false;
-                paymentData.button.textContent = getTranslationSafe("accept_payment_button_terminal");
-              }
+              releasePaymentButton(paymentData.button);
               const errorMessage = error.message || error.toString();
               showAlertWithKeyboardHide(errorMessage || "Ошибка получения токена авторизации. Попробуйте позже.");
             });
         })
         .catch(function (error) {
           console.error('❌ Ошибка проверки operator_login перед оплатой:', error);
-          if (paymentData.button) {
-            paymentData.button.disabled = false;
-            paymentData.button.textContent = getTranslationSafe("accept_payment_button_terminal");
-          }
+          releasePaymentButton(paymentData.button);
           showAlertWithKeyboardHide('Ошибка проверки настроек терминала. Попробуйте еще раз.');
         });
     } else {
@@ -380,7 +371,19 @@ const ModalSystem = {
 
     const messageEl = document.createElement('div');
     messageEl.className = `modal-message ${type}-message`;
-    messageEl.textContent = message;
+    if (typeof message === 'string') {
+      messageEl.textContent = message;
+    } else if (message && typeof message === 'object') {
+      if (message.html) {
+        messageEl.innerHTML = message.html;
+      } else if (message.text) {
+        messageEl.textContent = message.text;
+      } else {
+        messageEl.textContent = '';
+      }
+    } else {
+      messageEl.textContent = '';
+    }
 
     const buttonContainer = document.createElement('div');
     buttonContainer.className = 'modal-buttons';
@@ -449,6 +452,53 @@ function showCustomAlert(message) {
 
 function showCustomConfirm(message, onConfirm, onCancel) {
   ModalSystem.confirm(message, onConfirm, onCancel);
+}
+
+function showPaymentConfirmationModal(options) {
+  const {
+    fio,
+    serviceName,
+    amount,
+    paymentType,
+    onConfirm,
+    onCancel
+  } = options || {};
+
+  let normalizedAmount;
+  if (typeof amount === 'number') {
+    normalizedAmount = Number.isInteger(amount) ? String(amount) : amount.toFixed(2);
+  } else {
+    const parsedAmount = amount !== undefined ? parseFloat(amount) : NaN;
+    if (!isNaN(parsedAmount)) {
+      normalizedAmount = Number.isInteger(parsedAmount) ? String(parsedAmount) : parsedAmount.toFixed(2);
+    } else {
+      normalizedAmount = amount ? String(amount) : '0';
+    }
+  }
+
+  const messageHtml = `
+    <div class="payment-confirmation">
+      <p>${getTranslationSafe("payment_confirm_question", "Подтвердите проведение оплаты")}</p>
+      <p><strong>${getTranslationSafe("payment_confirm_fio", "ФИО")}</strong>: ${fio || getTranslationSafe("data_not_available", "Не указано")}</p>
+      <p><strong>${getTranslationSafe("payment_confirm_service", "Услуга")}</strong>: ${serviceName || getTranslationSafe("data_not_available", "Не указано")}</p>
+      <p><strong>${getTranslationSafe("payment_confirm_amount", "Сумма")}</strong>: ${normalizedAmount} ${getTranslationSafe("payment_confirm_currency", "сом")}</p>
+    </div>
+  `;
+
+  ModalSystem.hideKeyboard(() => {
+    ModalSystem.createModal('paymentConfirmModal', 'confirm', { html: messageHtml }, [
+      {
+        text: getTranslationSafe("payment_confirm_cancel", "Отмена"),
+        class: 'cancel',
+        callback: onCancel
+      },
+      {
+        text: getTranslationSafe("payment_confirm_confirm", "Подтвердить"),
+        class: 'primary',
+        callback: onConfirm
+      }
+    ]);
+  });
 }
 
 async function checkPhoneAuth() {
@@ -859,6 +909,7 @@ function getValidToken() {
 function sendPaymentToFlutter(paymentData, button, details, paymentType) {
   if (!window.flutter_inappwebview) {
     showAlertWithKeyboardHide(getTranslationSafe("payment_flutter_error"));
+    releaseActivePaymentButton();
     return;
   }
 
@@ -1280,12 +1331,14 @@ function addFiscalToPayment(fiscalData) {
   if (!rnn) {
     console.warn('⚠️ RNN не найден в фискальных данных, обновление платежа невозможно');
     writePaymentLog('⚠️ RNN не найден в фискальных данных | Data: ' + JSON.stringify(parsedFiscalData));
+    releaseActivePaymentButton();
     return;
   }
 
   if (!qrRsk) {
     console.warn('⚠️ QR RSK не найден в фискальных данных, обновление платежа невозможно');
     writePaymentLog('⚠️ QR RSK не найден в фискальных данных | RNN: ' + rnn);
+    releaseActivePaymentButton();
     return;
   }
 
@@ -1311,10 +1364,12 @@ function addFiscalToPayment(fiscalData) {
         console.error('❌ Ошибка обновления платежа:', data.message);
         writePaymentLog('❌ Ошибка обновления платежа | Message: ' + (data.message || 'не указано') + ' | RNN: ' + rnn);
       }
+      releaseActivePaymentButton();
     })
     .catch(function (error) {
       console.error('❌ Ошибка сети при обновлении платежа:', error);
       writePaymentLog('❌ Ошибка сети при обновлении платежа | Error: ' + error.message + ' | RNN: ' + rnn);
+      releaseActivePaymentButton();
     });
 }
 
@@ -1338,6 +1393,7 @@ window.createPaymentAfterFlutterConfirmation = function (response) {
       if (waitingModal) {
         waitingModal.remove();
       }
+      releaseActivePaymentButton();
       return;
     }
   }
@@ -1353,6 +1409,7 @@ window.createPaymentAfterFlutterConfirmation = function (response) {
     console.error("❌ Ошибка оплаты от Flutter:", responseData);
     const errorMessage = responseData.message || responseData.error || "Ошибка при выполнении оплаты";
     showPaymentError(errorMessage);
+    releaseActivePaymentButton();
     return;
   }
 
@@ -1406,7 +1463,66 @@ window.createPaymentAfterFlutterConfirmation = function (response) {
   console.warn('⚠️ Неизвестный формат ответа от Flutter:', responseData);
   writePaymentLog('⚠️ Неизвестный формат ответа от Flutter | Data: ' + JSON.stringify(responseData));
   showPaymentError("Неизвестный формат ответа от Flutter");
+  releaseActivePaymentButton();
 };
+
+// Функция обновления баланса абонента после платежа
+function updateSubscriberBalance(accountNumber) {
+  if (!accountNumber) {
+    console.warn('⚠️ Не указан лицевой счет для обновления баланса');
+    return;
+  }
+
+  // Получаем mp_id из селекта
+  const mpId = searchMunicipalEnterprise ? searchMunicipalEnterprise.value.trim() : "";
+  if (!mpId) {
+    console.warn('⚠️ Не выбран МП для обновления баланса');
+    return;
+  }
+
+  console.log('🔄 Обновляем баланс абонента:', accountNumber);
+
+  // Запрашиваем обновленные данные абонента
+  fetch(BASE_API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: "searchSubscribers",
+      mp_id: mpId,
+      account_number: accountNumber
+    })
+  })
+    .then(function (response) {
+      return response.json();
+    })
+    .then(function (data) {
+      if (data.success && data.data && data.data.length > 0) {
+        // Находим абонента в массиве и обновляем его баланс
+        const updatedSubscriber = data.data[0];
+        const index = allFoundSubscribers.findIndex(function (sub) {
+          return sub.account_number === accountNumber;
+        });
+
+        if (index !== -1) {
+          // Обновляем баланс абонента
+          allFoundSubscribers[index].balance = updatedSubscriber.balance;
+          console.log('✅ Баланс абонента обновлен:', accountNumber, 'Новый баланс:', updatedSubscriber.balance);
+
+          // Перерисовываем результаты
+          if (typeof window.renderCurrentPageResults === 'function') {
+            window.renderCurrentPageResults();
+          }
+        } else {
+          console.warn('⚠️ Абонент не найден в списке для обновления:', accountNumber);
+        }
+      } else {
+        console.warn('⚠️ Не удалось получить обновленные данные абонента:', accountNumber);
+      }
+    })
+    .catch(function (error) {
+      console.error('❌ Ошибка обновления баланса абонента:', error);
+    });
+}
 
 // Функция создания платежа в системе
 // ВАЖНО: responseData должен содержать все данные платежа от Flutter
@@ -1420,6 +1536,7 @@ function createPaymentInSystem(responseData) {
     console.error("❌ Неполные данные платежа в ответе от Flutter:", paymentData);
     writePaymentLog('❌ Неполные данные платежа в ответе от Flutter | Data: ' + JSON.stringify(paymentData));
     showPaymentError("Ошибка: неполные данные платежа от Flutter");
+    releaseActivePaymentButton();
     return;
   }
 
@@ -1459,16 +1576,21 @@ function createPaymentInSystem(responseData) {
         // Платеж успешно создан
         writePaymentLog('✅ Платеж успешно создан на сервере | PaymentID: ' + (data.payment_id || 'не указан') + ' | LS: ' + paymentData.ls + ' | Amount: ' + paymentData.amount);
         showPaymentSuccess("Платеж успешно создан!");
+
+        // Обновляем баланс абонента
+        updateSubscriberBalance(paymentData.ls);
       } else {
         // Ошибка создания платежа
         writePaymentLog('❌ Ошибка создания платежа на сервере | Message: ' + (data.message || 'не указано') + ' | LS: ' + paymentData.ls);
         showPaymentError(data.message || "Ошибка создания платежа");
       }
+      releaseActivePaymentButton();
     })
     .catch(function (error) {
       console.error("❌ Ошибка создания платежа:", error);
       writePaymentLog('❌ Ошибка сети при создании платежа | Error: ' + error.message + ' | LS: ' + (paymentData.ls || 'не указан'));
       showPaymentError("Ошибка создания платежа: " + error.message);
+      releaseActivePaymentButton();
     });
 }
 
@@ -1480,6 +1602,33 @@ function showPaymentSuccess(message) {
 // Функция показа ошибки
 function showPaymentError(message) {
   ModalSystem.alert("Ошибка: " + message);
+}
+
+let activePaymentButton = null;
+
+function setActivePaymentButton(button) {
+  if (button) {
+    activePaymentButton = button;
+    button.disabled = true;
+  }
+}
+
+function releaseActivePaymentButton() {
+  if (activePaymentButton) {
+    activePaymentButton.disabled = false;
+    activePaymentButton = null;
+  }
+}
+
+function releasePaymentButton(button) {
+  if (!button) {
+    return;
+  }
+  if (button === activePaymentButton) {
+    releaseActivePaymentButton();
+  } else {
+    button.disabled = false;
+  }
 }
 
 // Функция для отображения ответа Flutter в модальном окне
@@ -1622,11 +1771,7 @@ function showPaymentWaitingModal(paymentData, button, details) {
   cancelBtn.onclick = () => {
     // Отменяем платеж - просто закрываем модальное окно
     modal.remove();
-    // Разблокируем кнопку
-    if (button) {
-      button.disabled = false;
-      button.textContent = getTranslationSafe("accept_payment_button_terminal");
-    }
+    releaseActivePaymentButton();
     showAlertWithKeyboardHide(getTranslationSafe("payment_cancelled"));
   };
 
@@ -1638,11 +1783,7 @@ function showPaymentWaitingModal(paymentData, button, details) {
   modal.appendChild(content);
   document.body.appendChild(modal);
 
-  // Блокируем кнопку
-  if (button) {
-    button.disabled = true;
-    button.textContent = getTranslationSafe("payment_waiting_button");
-  }
+  // Кнопку не трогаем здесь — состояние управляется отдельно
 }
 
 // Делаем функцию глобальной для доступа из language.js
@@ -1713,6 +1854,20 @@ window.renderCurrentPageResults = function renderCurrentPageResults() {
       serviceOptionsHtml += `<option value="" disabled>Услуги не найдены</option>`;
     }
 
+    // Определяем тип баланса и стили
+    const balance = subscriber.balance ? parseFloat(subscriber.balance) : 0;
+    let balanceLabelKey = "balance_label";
+    let balanceValueClass = "";
+    const balanceDisplayValue = subscriber.balance || "0";
+
+    if (balance > 0) {
+      balanceLabelKey = "debt_label";
+      balanceValueClass = "debt-balance";
+    } else if (balance < 0) {
+      balanceLabelKey = "overpayment_label";
+      balanceValueClass = "overpayment-balance";
+    }
+
     details.innerHTML = `
       <div class="detail-row">
         <span class="detail-label">${getTranslationSafe("ls_label")}</span>
@@ -1739,8 +1894,8 @@ window.renderCurrentPageResults = function renderCurrentPageResults() {
         <span class="detail-value">${subscriber.flat || getTranslationSafe("data_not_available")}</span>
       </div>
       <div class="detail-row">
-        <span class="detail-label">${getTranslationSafe("balance_label")}</span>
-        <span class="detail-value ${subscriber.balance && parseFloat(subscriber.balance) < 0 ? 'negative-balance' : ''}">${subscriber.balance || getTranslationSafe("data_not_available")}</span>
+        <span class="detail-label">${getTranslationSafe(balanceLabelKey)}</span>
+        <span class="detail-value ${balanceValueClass}">${balanceDisplayValue}</span>
       </div>
       <div class="service-section">
         <select id="service-${subscriber.account_number}" class="service-select" name="service">
@@ -1785,111 +1940,100 @@ window.renderCurrentPageResults = function renderCurrentPageResults() {
           return;
         }
 
-        // Блокируем кнопку
-        button.disabled = true;
-        button.textContent = getTranslationSafe("payment_processing_button");
+        const flutterPaymentType = paymentType === "cash" ? "CASH" : "CARD";
+        const finalUserId = controllerNameDisplay ? controllerNameDisplay.getAttribute('data-user-id') || '1' : '1';
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = today.getMonth() + 1;
+        const day = today.getDate();
+        const currentDate = year + '-' + (month < 10 ? '0' + month : month) + '-' + (day < 10 ? '0' + day : day);
 
-        try {
-          // Определяем тип платежа для Flutter
-          const flutterPaymentType = paymentType === "cash" ? "CASH" : "CARD";
+        const paymentData = {
+          action: "processPayment",
+          ls: subscriber.account_number,
+          service_id: selectedServiceId,
+          service: serviceName,
+          amount: enteredAmount,
+          payment_type: flutterPaymentType,
+          date: currentDate,
+          controllerName: controllerName,
+          user_id: finalUserId,
+          vat_value: vat_value,
+          st_value: st_value
+        };
 
-          // Создаем данные платежа (общие для всех типов платежей)
-          const finalUserId = controllerNameDisplay ? controllerNameDisplay.getAttribute('data-user-id') || '1' : '1';
-          const today = new Date();
-          const year = today.getFullYear();
-          const month = today.getMonth() + 1;
-          const day = today.getDate();
-          const currentDate = year + '-' + (month < 10 ? '0' + month : month) + '-' + (day < 10 ? '0' + day : day);
+        const startPaymentFlow = () => {
+          setActivePaymentButton(button);
 
-          const paymentData = {
-            action: "processPayment",
-            ls: subscriber.account_number,
-            service_id: selectedServiceId,
-            service: serviceName,
-            amount: enteredAmount,
-            payment_type: flutterPaymentType,
-            date: currentDate,
-            controllerName: controllerName,
-            user_id: finalUserId,
-            vat_value: vat_value, // НДС (Налог на добавленную стоимость)
-            st_value: st_value  // НСП (Налог с продаж)
-          };
+          try {
+            if (flutterPaymentType === "CARD") {
+              console.log('💳 Нажата кнопка оплаты через терминал (CARD)');
+              console.log('📋 Данные платежа подготовлены:', paymentData);
 
-          // Для терминальных платежей сначала получаем серийный номер, потом проверяем operator_login в БД
-          if (flutterPaymentType === "CARD") {
-            console.log('💳 Нажата кнопка оплаты через терминал (CARD)');
-            console.log('📋 Данные платежа подготовлены:', paymentData);
+              if (window.flutter_inappwebview) {
+                pendingPaymentAfterSerialNumber = {
+                  paymentData: paymentData,
+                  button: button,
+                  details: details,
+                  flutterPaymentType: flutterPaymentType
+                };
 
-            // Всегда запрашиваем серийный номер у Flutter для проверки в БД
-            if (window.flutter_inappwebview) {
-              // Сохраняем данные платежа для продолжения после получения серийного номера
-              pendingPaymentAfterSerialNumber = {
-                paymentData: paymentData,
-                button: button,
-                details: details,
-                flutterPaymentType: flutterPaymentType
-              };
+                console.log('📱 Запрашиваем серийный номер терминала у Flutter...');
+                window.flutter_inappwebview.callHandler("getSerialNumber");
 
-              console.log('📱 Запрашиваем серийный номер терминала у Flutter...');
-              // Запрашиваем серийный номер у Flutter
-              window.flutter_inappwebview.callHandler("getSerialNumber");
-
-              return; // Прерываем выполнение, продолжим после получения серийного номера
-            } else {
-              console.error('❌ Flutter недоступен');
-              button.disabled = false;
-              button.textContent = getTranslationSafe("accept_payment_button_terminal");
-              return; // Прерываем выполнение
+                return;
+              } else {
+                console.error('❌ Flutter недоступен');
+                releasePaymentButton(button);
+                return;
+              }
             }
+
+            if (flutterPaymentType === "CASH") {
+              console.log('💰 Наличный платеж - отправляем без токена');
+              sendPaymentToFlutter(paymentData, button, details, flutterPaymentType);
+            } else {
+              console.log('💳 Карточный платеж - запрашиваем токен');
+              getValidToken()
+                .then(token => {
+                  paymentData.megapay_token = token;
+                  sendPaymentToFlutter(paymentData, button, details, flutterPaymentType);
+                })
+                .catch(error => {
+                  console.error("❌ Ошибка получения токена:", error);
+                  releasePaymentButton(button);
+
+                  const errorMessage = error.message || error.toString();
+
+                  if (errorMessage.includes('OPERATOR_LOGIN_NOT_CONFIGURED') ||
+                    errorMessage.includes('не настроен') ||
+                    errorMessage.includes('operator_login')) {
+                    const message = errorMessage.includes('OPERATOR_LOGIN_NOT_CONFIGURED')
+                      ? errorMessage.replace('OPERATOR_LOGIN_NOT_CONFIGURED: ', '')
+                      : 'Для данного терминала не настроен operator_login.';
+                    showAlertWithKeyboardHide(message);
+                  } else if (errorMessage.includes('Серийный номер терминала не получен')) {
+                    showAlertWithKeyboardHide(errorMessage);
+                  } else {
+                    showAlertWithKeyboardHide(errorMessage || "Ошибка получения токена авторизации. Попробуйте позже.");
+                  }
+                });
+            }
+          } catch (error) {
+            console.error("Ошибка сети:", error);
+            releasePaymentButton(button);
+            showAlertWithKeyboardHide(getTranslationSafe("payment_network_error"));
           }
+        };
 
-          // Для наличных платежей не нужен токен - сразу отправляем в Flutter
-          if (flutterPaymentType === "CASH") {
-            console.log('💰 Наличный платеж - отправляем без токена');
-            sendPaymentToFlutter(paymentData, button, details, flutterPaymentType);
-          } else {
-            // Для карточных платежей получаем токен
-            console.log('💳 Карточный платеж - запрашиваем токен');
-            getValidToken()
-              .then(token => {
-                // Добавляем токен к данным платежа
-                paymentData.megapay_token = token;
-
-                // Отправляем данные в Flutter
-                sendPaymentToFlutter(paymentData, button, details, flutterPaymentType);
-              })
-              .catch(error => {
-                console.error("❌ Ошибка получения токена:", error);
-                button.disabled = false;
-                button.textContent = getTranslationSafe("accept_payment_button_terminal");
-
-                // Проверяем тип ошибки
-                const errorMessage = error.message || error.toString();
-
-                if (errorMessage.includes('OPERATOR_LOGIN_NOT_CONFIGURED') ||
-                  errorMessage.includes('не настроен') ||
-                  errorMessage.includes('operator_login')) {
-                  // Если operator_login не настроен - показываем простое сообщение
-                  const message = errorMessage.includes('OPERATOR_LOGIN_NOT_CONFIGURED')
-                    ? errorMessage.replace('OPERATOR_LOGIN_NOT_CONFIGURED: ', '')
-                    : 'Для данного терминала не настроен operator_login.';
-                  showAlertWithKeyboardHide(message);
-                } else if (errorMessage.includes('Серийный номер терминала не получен')) {
-                  // Если серийный номер не получен - показываем простое сообщение
-                  showAlertWithKeyboardHide(errorMessage);
-                } else {
-                  // Другие ошибки
-                  showAlertWithKeyboardHide(errorMessage || "Ошибка получения токена авторизации. Попробуйте позже.");
-                }
-              });
-          }
-        } catch (error) {
-          console.error("Ошибка сети:", error);
-          showAlertWithKeyboardHide(getTranslationSafe("payment_network_error"));
-        } finally {
-          // Кнопка разблокируется в модальном окне при получении результата от Flutter
-          // Здесь не разблокируем, так как оба типа платежей отправляются во Flutter
-        }
+        showPaymentConfirmationModal({
+          fio: subscriber.full_name,
+          serviceName,
+          amount: enteredAmount,
+          paymentType: flutterPaymentType,
+          onConfirm: startPaymentFlow,
+          onCancel: () => { }
+        });
       });
     });
 
