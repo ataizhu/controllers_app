@@ -536,6 +536,7 @@ async function checkPhoneAuth() {
       setControllerName(data.data.fullname || data.data.username, data.data.vtiger_user_id || '1');
       showScreen("searchScreen");
       loadServicesDropdown();
+      loadMunicipalEnterprisesDropdown();
     } else {
       showScreen("loginScreen");
     }
@@ -682,6 +683,7 @@ if (loginForm) {
             setControllerName(userFullname || login, userVtigerId || '1');
             showScreen("searchScreen");
             loadServicesDropdown();
+            loadMunicipalEnterprisesDropdown();
           } else {
             displayMessage(messageDiv, authPhoneData.message || getTranslationSafe("login_error_auth_failed"), "error");
             showScreen("loginScreen");
@@ -819,6 +821,42 @@ async function loadServicesDropdown() {
   }
 }
 
+async function loadMunicipalEnterprisesDropdown() {
+  try {
+    const response = await fetch(BASE_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "getMunicipalEnterprises"
+      }),
+    });
+    const data = await response.json();
+
+    if (data.success && data.municipal_enterprises && data.municipal_enterprises.length > 0) {
+      const select = document.getElementById("searchMunicipalEnterprise");
+      if (select) {
+        // Очищаем существующие опции (кроме первой пустой)
+        select.innerHTML = '<option value="">' + getTranslationSafe("search_mp_placeholder", "Выберите Муниципальное предприятие") + '</option>';
+
+        // Добавляем опции из ответа
+        // ВАЖНО: в vtiger_estates.cf_field_municipal_enterprise хранится название МП (текст), а не ID
+        data.municipal_enterprises.forEach(function (mp) {
+          const option = document.createElement("option");
+          option.value = mp.name; // Используем название, так как в БД хранится текст
+          option.textContent = mp.name;
+          select.appendChild(option);
+        });
+
+        console.log("Муниципальные предприятия загружены:", data.municipal_enterprises.length);
+      }
+    } else {
+      console.warn("Муниципальные предприятия не найдены");
+    }
+  } catch (error) {
+    console.error("Ошибка при загрузке муниципальных предприятий:", error);
+  }
+}
+
 if (searchForm) {
   searchForm.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -849,6 +887,9 @@ if (searchForm) {
       account_number: accountNumber,
     };
 
+    console.log("🔍 Параметры поиска:", searchParams);
+    console.log("🔍 Выбранное МП (value):", mpId, "тип:", typeof mpId);
+
     // Убираем сообщение "Выполняется поиск"
 
     try {
@@ -860,6 +901,8 @@ if (searchForm) {
 
       const data = await response.json();
 
+      console.log("📥 Ответ от сервера:", data);
+      console.log("📥 Количество найденных абонентов:", data.data ? data.data.length : 0);
 
       if (data.success) {
         if (data.data && data.data.length > 0) {
@@ -869,15 +912,13 @@ if (searchForm) {
           }
           showScreen("resultsScreen");
           renderCurrentPageResults();
-          // resultsMessageDiv убран
         } else {
           allFoundSubscribers = [];
           if (resultsCountSpan) {
             resultsCountSpan.textContent = `(0 ${getTranslationSafe("results_count_found")})`;
           }
           showScreen("resultsScreen");
-          renderCurrentPageResults();
-          // resultsMessageDiv убран
+          renderCurrentPageResults(); // Функция сама покажет сообщение о том, что абоненты не найдены
         }
       } else {
         displayMessage(searchMessageDiv, data.message || getTranslationSafe("search_message_error"), "error");
@@ -1806,7 +1847,14 @@ window.renderCurrentPageResults = function renderCurrentPageResults() {
   if (allFoundSubscribers.length === 0) {
     if (paginationContainer) paginationContainer.classList.add("hidden");
     if (resultsCountSpan) resultsCountSpan.textContent = `(0 ${getTranslationSafe("results_count_found")})`;
-    // resultsMessageDiv убран
+
+    // Показываем сообщение, что абоненты не найдены
+    const noResultsMessage = document.createElement("div");
+    noResultsMessage.className = "no-results-message";
+    noResultsMessage.style.cssText = "text-align: center; padding: 40px 20px; color: #666; font-size: 1.1rem;";
+    noResultsMessage.textContent = getTranslationSafe("search_message_no_subscribers_found", "По вашему запросу абоненты не найдены.");
+    searchResultsList.appendChild(noResultsMessage);
+
     return;
   } else {
     // Показываем пагинацию только если больше 1 страницы

@@ -272,12 +272,15 @@ try {
                               WHERE vc.deleted = 0 
                               AND ve.cf_deactivated = '0'";
 
-                // Если у вас есть поле для привязки к МП (например cf_municipal_enterprise_id), 
-                // добавьте условие: AND ve.cf_municipal_enterprise_id = ?
-                // Для примера считаем, что все записи относятся к выбранному МП
-
                 $conditions = array();
                 $params = array();
+
+                // Фильтр по муниципальному предприятию
+                if (!empty($mpId)) {
+                    $conditions[] = "ve.cf_field_municipal_enterprise = ?";
+                    $params[] = $mpId;
+                    error_log("Added municipal enterprise filter: " . $mpId);
+                }
 
                 // Фильтр по лицевому счёту
                 if (!empty($accountNumber)) {
@@ -378,6 +381,37 @@ try {
             } catch (Exception $e) {
                 error_log("Error in getServices: " . $e->getMessage());
                 $response = ['success' => false, 'message' => 'Ошибка при получении услуг: ' . $e->getMessage()];
+            }
+            break;
+
+        case 'getMunicipalEnterprises':
+            try {
+                // Получаем муниципальные предприятия из таблицы vtiger_cf_field_municipal_enterprise
+                $query = "SELECT cf_field_municipal_enterpriseid, cf_field_municipal_enterprise 
+                          FROM vtiger_cf_field_municipal_enterprise 
+                          ORDER BY cf_field_municipal_enterprise ASC";
+
+                error_log("Executing municipal enterprises query from vtiger_cf_field_municipal_enterprise");
+                $result = $adb->pquery($query, array());
+
+                if ($result === false) {
+                    $response = ['success' => false, 'message' => 'Ошибка базы данных при получении муниципальных предприятий.'];
+                    break;
+                }
+
+                $municipalEnterprises = array();
+                while ($row = $adb->fetchByAssoc($result)) {
+                    $municipalEnterprises[] = array(
+                        'id' => $row['cf_field_municipal_enterpriseid'],
+                        'name' => $row['cf_field_municipal_enterprise']
+                    );
+                }
+
+                error_log("Found " . count($municipalEnterprises) . " municipal enterprises");
+                $response = ['success' => true, 'message' => 'Муниципальные предприятия получены.', 'municipal_enterprises' => $municipalEnterprises];
+            } catch (Exception $e) {
+                error_log("Error in getMunicipalEnterprises: " . $e->getMessage());
+                $response = ['success' => false, 'message' => 'Ошибка при получении муниципальных предприятий: ' . $e->getMessage()];
             }
             break;
 
