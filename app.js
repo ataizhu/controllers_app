@@ -403,7 +403,7 @@ const ModalSystem = {
       if (e.target === modal) {
         modal.remove();
         var cancelBtn = buttons.find(function (b) {
-          return b.class && b.class.includes('cancel');
+          return b.class && b.class.indexOf('cancel') !== -1;
         });
         if (cancelBtn && cancelBtn.callback) {
           cancelBtn.callback();
@@ -1289,7 +1289,7 @@ function requestNewToken() {
           console.error('❌ Ошибка от сервера:', errorMsg);
 
           // Если ошибка связана с operator_login - показываем специальное сообщение
-          if (errorMsg.includes('operator_login') || errorMsg.includes('не настроен')) {
+          if (errorMsg.indexOf('operator_login') !== -1 || errorMsg.indexOf('не настроен') !== -1) {
             reject(new Error('OPERATOR_LOGIN_NOT_CONFIGURED: ' + errorMsg));
           } else {
             reject(new Error(errorMsg));
@@ -1416,18 +1416,13 @@ function addFiscalToPayment(fiscalData) {
 
 // Обработчик ответа от Flutter после оплаты
 window.createPaymentAfterFlutterConfirmation = function (response) {
-  console.log('🔄 Получен ответ от Flutter после оплаты: ', response);
-  // Логируем как есть - если строка, то строка, если объект - сериализуем
-  const logData = typeof response === 'string' ? response : JSON.stringify(response, null, 2);
-  writePaymentLog('🔄 Получен ответ от Flutter после оплаты: ' + logData);
-
   // Парсим ответ если он строка
   let responseData = response;
   if (typeof response === 'string') {
     try {
       responseData = JSON.parse(response);
     } catch (e) {
-      console.error('❌ Ошибка парсинга JSON:', e);
+      writePaymentLog('❌ Ошибка парсинга JSON | Error: ' + e.message + ' | Raw data: ' + response);
       showPaymentError("Ошибка формата ответа от платежной системы");
       // Закрываем модальное окно ожидания
       const waitingModal = document.getElementById("paymentWaitingModal");
@@ -1445,10 +1440,48 @@ window.createPaymentAfterFlutterConfirmation = function (response) {
     waitingModal.remove();
   }
 
-  const hasErrorShape = responseData && typeof responseData === 'object' && responseData.error && responseData.errorCode !== undefined;
-  if (hasErrorShape) {
-    console.error("❌ Ошибка оплаты от Flutter:", responseData);
-    const errorMessage = responseData.message || responseData.error || "Ошибка при выполнении оплаты";
+  // Проверка на отмену платежа пользователем
+  // Проверяем в корне объекта и в paymentData (если есть)
+  const checkCancelled = function (data) {
+    if (!data || typeof data !== 'object') return false;
+    const errorCode = String(data.errorCode || '').trim();
+    const messageLower = data.message ? String(data.message).toLowerCase() : '';
+    const errorLower = data.error ? String(data.error).toLowerCase() : '';
+    const hasCanceledMessage = messageLower.indexOf("canceled by operator") !== -1;
+    const hasCanceledError = errorLower.indexOf("canceled") !== -1;
+    const is027 = errorCode === "027";
+
+    return is027 || hasCanceledMessage || hasCanceledError;
+  };
+
+  const isCancelled = checkCancelled(responseData) ||
+    (responseData && responseData.paymentData && checkCancelled(responseData.paymentData));
+
+  if (isCancelled) {
+    showAlertWithKeyboardHide(getTranslationSafe("payment_cancelled", "Платеж отменен"));
+    releaseActivePaymentButton();
+    return;
+  }
+
+  // Если есть errorCode (любой, не только 027), это ошибка - не обрабатываем платеж
+  // Проверяем errorCode в корне и в paymentData
+  const hasErrorCode = responseData && typeof responseData === 'object' && (
+    (responseData.errorCode !== undefined && responseData.errorCode !== null) ||
+    (responseData.paymentData && responseData.paymentData.errorCode !== undefined && responseData.paymentData.errorCode !== null)
+  );
+
+  if (hasErrorCode && !isCancelled) {
+    writePaymentLog('❌ Ошибка оплаты от Flutter | Data: ' + JSON.stringify(responseData));
+    var errorMessage = "Ошибка при выполнении оплаты";
+    if (responseData && responseData.message) {
+      errorMessage = responseData.message;
+    } else if (responseData && responseData.error) {
+      errorMessage = responseData.error;
+    } else if (responseData && responseData.paymentData && responseData.paymentData.message) {
+      errorMessage = responseData.paymentData.message;
+    } else if (responseData && responseData.paymentData && responseData.paymentData.error) {
+      errorMessage = responseData.paymentData.error;
+    }
     showPaymentError(errorMessage);
     releaseActivePaymentButton();
     return;
@@ -1462,8 +1495,13 @@ window.createPaymentAfterFlutterConfirmation = function (response) {
   const paymentType = paymentTypeRaw ? paymentTypeRaw.toUpperCase() : null;
 
   if (paymentType === 'CASH') {
-    console.log('💵 Получен CASH-платеж -> создаем запись с QR (если есть)');
-    const payloadForCreation = responseData.paymentData ? { ...responseData, paymentData: { ...responseData.paymentData } } : { ...responseData };
+    var payloadForCreation;
+    if (responseData.paymentData) {
+      payloadForCreation = Object.assign({}, responseData);
+      payloadForCreation.paymentData = Object.assign({}, responseData.paymentData);
+    } else {
+      payloadForCreation = Object.assign({}, responseData);
+    }
     const targetPayload = payloadForCreation.paymentData ? payloadForCreation.paymentData : payloadForCreation;
     targetPayload.rnn = null;
     if (targetPayload.qr) {
@@ -1474,8 +1512,13 @@ window.createPaymentAfterFlutterConfirmation = function (response) {
   }
 
   if (paymentType === 'CARD') {
-    console.log('💳 Получен CARD-платеж -> создаем запись');
-    const payloadForCreation = responseData.paymentData ? { ...responseData, paymentData: { ...responseData.paymentData } } : { ...responseData };
+    var payloadForCreation;
+    if (responseData.paymentData) {
+      payloadForCreation = Object.assign({}, responseData);
+      payloadForCreation.paymentData = Object.assign({}, responseData.paymentData);
+    } else {
+      payloadForCreation = Object.assign({}, responseData);
+    }
     const targetPayload = payloadForCreation.paymentData ? payloadForCreation.paymentData : payloadForCreation;
     if (responseData.transaction && responseData.transaction.instrumentSpecificData && responseData.transaction.instrumentSpecificData.rrn) {
       targetPayload.rnn = responseData.transaction.instrumentSpecificData.rrn;
@@ -1495,13 +1538,11 @@ window.createPaymentAfterFlutterConfirmation = function (response) {
       : Boolean(payload.cashless);
 
     if (cashless) {
-      console.log('🧾 Фискальный пакет (cashless=true) -> обновляем платеж по RNN');
       addFiscalToPayment(payload);
       return;
     }
   }
 
-  console.warn('⚠️ Неизвестный формат ответа от Flutter:', responseData);
   writePaymentLog('⚠️ Неизвестный формат ответа от Flutter | Data: ' + JSON.stringify(responseData));
   showPaymentError("Неизвестный формат ответа от Flutter");
   releaseActivePaymentButton();
@@ -2053,14 +2094,14 @@ window.renderCurrentPageResults = function renderCurrentPageResults() {
 
                   const errorMessage = error.message || error.toString();
 
-                  if (errorMessage.includes('OPERATOR_LOGIN_NOT_CONFIGURED') ||
-                    errorMessage.includes('не настроен') ||
-                    errorMessage.includes('operator_login')) {
-                    const message = errorMessage.includes('OPERATOR_LOGIN_NOT_CONFIGURED')
+                  if (errorMessage.indexOf('OPERATOR_LOGIN_NOT_CONFIGURED') !== -1 ||
+                    errorMessage.indexOf('не настроен') !== -1 ||
+                    errorMessage.indexOf('operator_login') !== -1) {
+                    const message = errorMessage.indexOf('OPERATOR_LOGIN_NOT_CONFIGURED') !== -1
                       ? errorMessage.replace('OPERATOR_LOGIN_NOT_CONFIGURED: ', '')
                       : 'Для данного терминала не настроен operator_login.';
                     showAlertWithKeyboardHide(message);
-                  } else if (errorMessage.includes('Серийный номер терминала не получен')) {
+                  } else if (errorMessage.indexOf('Серийный номер терминала не получен') !== -1) {
                     showAlertWithKeyboardHide(errorMessage);
                   } else {
                     showAlertWithKeyboardHide(errorMessage || "Ошибка получения токена авторизации. Попробуйте позже.");
