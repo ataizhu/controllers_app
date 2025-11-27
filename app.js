@@ -10,8 +10,8 @@ let pendingSettingsOpen = false; // Флаг для отслеживания з�
 let pendingPaymentAfterSerialNumber = null; // Данные платежа ожидающие серийный номер
 
 // Переменные для налогов
-let vat_value = 12.00; // НДС (Налог на добавленную стоимость)
-let st_value = 2.00; // НСП (Налог с продаж)
+let vat_value = 0.00; // НДС (Налог на добавленную стоимость)
+let st_value = 0.00; // НСП (Налог с продаж)
 
 // Функция для записи логов на сервер
 function writePaymentLog(message) {
@@ -536,7 +536,7 @@ async function checkPhoneAuth() {
       setControllerName(data.data.fullname || data.data.username, data.data.vtiger_user_id || '1');
       showScreen("searchScreen");
       loadServicesDropdown();
-      loadMunicipalEnterprisesDropdown();
+      // loadMunicipalEnterprisesDropdown();
     } else {
       showScreen("loginScreen");
     }
@@ -683,7 +683,7 @@ if (loginForm) {
             setControllerName(userFullname || login, userVtigerId || '1');
             showScreen("searchScreen");
             loadServicesDropdown();
-            loadMunicipalEnterprisesDropdown();
+            // loadMunicipalEnterprisesDropdown();
           } else {
             displayMessage(messageDiv, authPhoneData.message || getTranslationSafe("login_error_auth_failed"), "error");
             showScreen("loginScreen");
@@ -793,7 +793,7 @@ if (backToSearchButton) {
 
     if (searchFIO) searchFIO.value = "";
     if (searchAccount) searchAccount.value = "";
-    if (searchMunicipalEnterprise) searchMunicipalEnterprise.value = "";
+    // if (searchMunicipalEnterprise) searchMunicipalEnterprise.value = "";
   });
 }
 
@@ -866,29 +866,31 @@ if (searchForm) {
     allFoundSubscribers = [];
     currentPage = 1;
 
-    const mpId = searchMunicipalEnterprise ? searchMunicipalEnterprise.value.trim() : "";
+    // const mpId = searchMunicipalEnterprise ? searchMunicipalEnterprise.value.trim() : "";
     const fio = searchFIO ? searchFIO.value.trim() : "";
     const accountNumber = searchAccount ? searchAccount.value.trim() : "";
+    const userId = controllerNameDisplay ? controllerNameDisplay.getAttribute('data-user-id') || '1' : '1';
 
     // Отладочные сообщения убраны
 
     // Проверка: МП должно быть выбрано обязательно
-    if (!mpId || mpId === "") {
-      showAlertWithKeyboardHide(getTranslationSafe("search_message_select_mp"));
-      return;
-    }
+    // if (!mpId || mpId === "") {
+    //   showAlertWithKeyboardHide(getTranslationSafe("search_message_select_mp"));
+    //   return;
+    // }
 
 
 
     const searchParams = {
       action: "searchSubscribers",
-      mp_id: mpId,
+      // mp_id: mpId,
       fio: fio,
       account_number: accountNumber,
+      user_id: userId,
     };
 
     console.log("🔍 Параметры поиска:", searchParams);
-    console.log("🔍 Выбранное МП (value):", mpId, "тип:", typeof mpId);
+    // console.log("🔍 Выбранное МП (value):", mpId, "тип:", typeof mpId);
 
     // Убираем сообщение "Выполняется поиск"
 
@@ -1556,11 +1558,11 @@ function updateSubscriberBalance(accountNumber) {
   }
 
   // Получаем mp_id из селекта
-  const mpId = searchMunicipalEnterprise ? searchMunicipalEnterprise.value.trim() : "";
-  if (!mpId) {
-    console.warn('⚠️ Не выбран МП для обновления баланса');
-    return;
-  }
+  // const mpId = searchMunicipalEnterprise ? searchMunicipalEnterprise.value.trim() : "";
+  // if (!mpId) {
+  //   console.warn('⚠️ Не выбран МП для обновления баланса');
+  //   return;
+  // }
 
   console.log('🔄 Обновляем баланс абонента:', accountNumber);
 
@@ -1570,7 +1572,7 @@ function updateSubscriberBalance(accountNumber) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       action: "searchSubscribers",
-      mp_id: mpId,
+      // mp_id: mpId,
       account_number: accountNumber
     })
   })
@@ -2166,20 +2168,20 @@ document.addEventListener("DOMContentLoaded", () => {
   controllerNameDisplay = document.getElementById("controllerNameDisplay");
 
   // Сбрасываем селект муниципального предприятия в пустое состояние
-  const municipalSelect = document.getElementById("searchMunicipalEnterprise");
-  if (municipalSelect) {
-    municipalSelect.selectedIndex = -1; // Ничего не выбрано
-    municipalSelect.setAttribute('data-selected', 'false');
+  // const municipalSelect = document.getElementById("searchMunicipalEnterprise");
+  // if (municipalSelect) {
+  //   municipalSelect.selectedIndex = -1; // Ничего не выбрано
+  //   municipalSelect.setAttribute('data-selected', 'false');
 
-    // Добавляем обработчик изменения селекта
-    municipalSelect.addEventListener('change', () => {
-      if (municipalSelect.selectedIndex >= 0) {
-        municipalSelect.setAttribute('data-selected', 'true');
-      } else {
-        municipalSelect.setAttribute('data-selected', 'false');
-      }
-    });
-  }
+  //   // Добавляем обработчик изменения селекта
+  //   municipalSelect.addEventListener('change', () => {
+  //     if (municipalSelect.selectedIndex >= 0) {
+  //       municipalSelect.setAttribute('data-selected', 'true');
+  //     } else {
+  //       municipalSelect.setAttribute('data-selected', 'false');
+  //     }
+  //   });
+  // }
 
   // Отключаем стандартную валидацию формы
   const searchForm = document.getElementById("searchForm");

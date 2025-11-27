@@ -85,6 +85,48 @@ try {
         file_put_contents($logFile, $logEntry, FILE_APPEND | LOCK_EX);
     }
 
+    // Функция для получения списка ID групп и пользователей для фильтрации по правам доступа
+    function getUserOwnerIds($adb, $userId) {
+        if (empty($userId)) {
+            return array();
+        }
+
+        $ownerIds = array();
+
+        // Получаем все группы пользователя и всех пользователей в этих группах
+        $groupsQuery = "SELECT ug.groupid, ug.userid
+                       FROM vtiger_users2group ug
+                       WHERE ug.groupid IN (
+                         SELECT groupid FROM vtiger_users2group WHERE userid = ?
+                       )";
+        $groupsResult = $adb->pquery($groupsQuery, array($userId));
+
+        if ($groupsResult === false) {
+            error_log("Error getting user groups for user_id: {$userId}");
+            // Возвращаем хотя бы сам user_id
+            return array($userId);
+        }
+
+        // Добавляем сам user_id
+        $ownerIds[] = $userId;
+
+        // Добавляем все groupid и userid из результата
+        while ($groupRow = $adb->fetchByAssoc($groupsResult)) {
+            if (!empty($groupRow['groupid'])) {
+                $ownerIds[] = $groupRow['groupid'];
+            }
+            if (!empty($groupRow['userid'])) {
+                $ownerIds[] = $groupRow['userid'];
+            }
+        }
+
+        // Убираем дубликаты и возвращаем массив
+        $ownerIds = array_unique($ownerIds);
+        error_log("Owner IDs for user {$userId}: " . json_encode($ownerIds));
+
+        return $ownerIds;
+    }
+
     $testResult = $adb->query("SELECT 1 as test");
     if (!$testResult) {
         throw new Exception('База данных недоступна');
@@ -236,14 +278,18 @@ try {
                 $mpId = isset($_POST['mp_id']) ? trim($_POST['mp_id']) : '';
                 $fio = isset($_POST['fio']) ? trim($_POST['fio']) : '';
                 $accountNumber = isset($_POST['account_number']) ? trim($_POST['account_number']) : '';
+                $userId = isset($_POST['user_id']) ? intval($_POST['user_id']) : null;
 
                 error_log("=== SEARCH BY MP START ===");
-                error_log("Search parameters: mp_id={$mpId}, fio={$fio}, account={$accountNumber}");
+                error_log("Search parameters: mp_id={$mpId}, fio={$fio}, account={$accountNumber}, user_id={$userId}");
 
-                if (empty($mpId)) {
-                    $response = ['success' => false, 'message' => 'Не выбрано Муниципальное предприятие'];
-                    break;
-                }
+                // if (empty($mpId)) {
+                //     $response = ['success' => false, 'message' => 'Не выбрано Муниципальное предприятие'];
+                //     break;
+                // }
+
+                // Получаем список ID групп и пользователей для фильтрации по правам доступа
+                $ownerIds = getUserOwnerIds($adb, $userId);
 
                 // Базовый запрос для поиска по МП
                 // Предполагаем, что mp_id=1 это "Таш-Кумырское ТС"
@@ -275,12 +321,20 @@ try {
                 $conditions = array();
                 $params = array();
 
-                // Фильтр по муниципальному предприятию
-                if (!empty($mpId)) {
-                    $conditions[] = "ve.cf_field_municipal_enterprise = ?";
-                    $params[] = $mpId;
-                    error_log("Added municipal enterprise filter: " . $mpId);
+                // Фильтр по правам доступа (smownerid должен быть в списке доступных ID)
+                if (!empty($ownerIds)) {
+                    $placeholders = implode(',', array_fill(0, count($ownerIds), '?'));
+                    $conditions[] = "vc.smownerid IN ({$placeholders})";
+                    $params = array_merge($params, $ownerIds);
+                    error_log("Added owner filter with " . count($ownerIds) . " IDs");
                 }
+
+                // Фильтр по муниципальному предприятию
+                // if (!empty($mpId)) {
+                //     $conditions[] = "ve.cf_field_municipal_enterprise = ?";
+                //     $params[] = $mpId;
+                //     error_log("Added municipal enterprise filter: " . $mpId);
+                // }
 
                 // Фильтр по лицевому счёту
                 if (!empty($accountNumber)) {
